@@ -69,6 +69,8 @@ class mlsMpmSimulator {
             C: { type: 'mat3' },
             direction: { type: 'vec3' },
             color: { type: 'vec3' },
+            birthTime: { type: 'float' },
+            lifetime: { type: 'float' },
             alive: { type: 'uint' },
         };
         this.particleBuffer = new StructuredArray(particleStruct, maxParticles, "particleData");
@@ -99,6 +101,7 @@ class mlsMpmSimulator {
         this.uniforms.gridSize = uniform(this.gridSize, "ivec3");
         this.uniforms.gridCellSize = uniform(this.gridCellSize);
         this.uniforms.dt = uniform(0.1);
+        this.uniforms.elapsedTime = uniform(0);
         this.uniforms.numParticles = uniform(0, "uint");
 
         this.uniforms.mouseRayDirection = uniform(new THREE.Vector3());
@@ -419,6 +422,7 @@ class mlsMpmSimulator {
             ? noiseVariationAmplitude * (0.5 + 0.5 * Math.sin(elapsed * noiseVariationSpeed * Math.PI * 2))
             : 0;
         this.uniforms.noise.value = noise + noiseVariation;
+        this.uniforms.elapsedTime.value = elapsed;
         this.uniforms.force.value = force;
         this.uniforms.containParticles.value = conf.containParticles ? 1 : 0;
         this.uniforms.stiffness.value = stiffness;
@@ -445,7 +449,7 @@ class mlsMpmSimulator {
         this.uniforms.emissionVelocity.value = conf.emissionVelocity;
 
         if (conf.useImageEmission && this.imageUploadManager) {
-            this.updateEmitter(interval);
+            this.updateEmitter(interval, elapsed);
         }
 
         if (particles !== this.numParticles) {
@@ -493,6 +497,8 @@ class mlsMpmSimulator {
             const mass = 1.0 - Math.random() * 0.002;
             this.particleBuffer.set(i, "position", vec);
             this.particleBuffer.set(i, "mass", mass);
+            this.particleBuffer.set(i, "birthTime", 0);
+            this.particleBuffer.set(i, "lifetime", 999999);
             this.particleBuffer.set(i, "alive", 1);
         }
     }
@@ -573,7 +579,7 @@ class mlsMpmSimulator {
         scheduleNextFrame();
     }
 
-    updateEmitter(delta) {
+    updateEmitter(delta, elapsed) {
         const particleCount = Math.min(conf.particles, this.particleLifetimes.length);
         const changedParticleIndices = [];
 
@@ -650,6 +656,8 @@ class mlsMpmSimulator {
             this.particleBuffer.set(particleIndex, "direction", emissionDirection);
             this.particleBuffer.set(particleIndex, "color", new THREE.Vector3(color.r, color.g, color.b));
             this.particleBuffer.set(particleIndex, "mass", 1.0 - Math.random() * 0.002);
+            this.particleBuffer.set(particleIndex, "birthTime", elapsed);
+            this.particleBuffer.set(particleIndex, "lifetime", conf.particleLifetime);
             this.particleBuffer.set(particleIndex, "alive", 1);
             this.particleLifetimes[particleIndex] = conf.particleLifetime;
             this.particleAlive[particleIndex] = 1;

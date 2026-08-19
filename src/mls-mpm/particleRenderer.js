@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, vec4, float, uint, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, vec4, float, uint, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform,smoothstep} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {conf} from "../conf";
 
@@ -120,6 +120,8 @@ class ParticleRenderer {
         this.geometry.instanceCount = this.mlsMpmSim.numParticles;
 
         this.material = new THREE.MeshBasicNodeMaterial();
+        this.material.transparent = true;
+        this.material.depthWrite = false;
 
         this.uniforms.size = uniform(1);
         this.uniforms.length = uniform(1);
@@ -133,6 +135,9 @@ class ParticleRenderer {
             const particleDensity = particle.get("density");
             const particleDirection = particle.get("direction");
             const particleAlive = particle.get("alive").equal(uint(1));
+            const lifetime = particle.get("lifetime");
+            const remainingLifetime = lifetime.sub(this.mlsMpmSim.uniforms.elapsedTime.sub(particle.get("birthTime")));
+            const fadeFactor = smoothstep(float(0), float(1), remainingLifetime.div(lifetime.mul(0.15))).mul(float(particleAlive));
 
             //return attribute("position").xyz.mul(10).add(vec3(32,32,0));
             //return attribute("position").xyz.mul(0.1).add(positionAttribute.mul(vec3(1,1,0.4)));
@@ -140,9 +145,14 @@ class ParticleRenderer {
             vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
             vAo.assign(particlePosition.z.div(64));
             vAo.assign(vAo.mul(vAo).oneMinus());
-            return mat.mul(attribute("position").xyz.mul(this.uniforms.size).mul(vec3(1 / 8, 1 / 3, this.uniforms.length))).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).mul(float(particleAlive)).add(particlePosition);
+            return mat.mul(attribute("position").xyz.mul(this.uniforms.size).mul(vec3(1 / 8, 1 / 3, this.uniforms.length))).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).mul(fadeFactor).add(particlePosition);
         })();
         this.material.colorNode = particle.get("color").max(vec3(this.uniforms.minimumBrightness));
+        this.material.opacityNode = Fn(() => {
+            const lifetime = particle.get("lifetime");
+            const remainingLifetime = lifetime.sub(this.mlsMpmSim.uniforms.elapsedTime.sub(particle.get("birthTime")));
+            return smoothstep(float(0), float(1), remainingLifetime.div(lifetime.mul(0.15))).mul(particle.get("alive").equal(uint(1)));
+        })();
         this.material.aoNode = vAo;
 
         //this.material.fragmentNode = vec4(0,0,0,1);
