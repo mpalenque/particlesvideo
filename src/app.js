@@ -118,9 +118,9 @@ class App {
         this.lights = new Lights();
         this.scene.add(this.lights.object);
 
-        const backgroundGeometry = new BackgroundGeometry();
-        await backgroundGeometry.init();
-        this.scene.add(backgroundGeometry.object);
+        this.backgroundGeometry = new BackgroundGeometry();
+        await this.backgroundGeometry.init();
+        this.scene.add(this.backgroundGeometry.object);
 
 
         const scenePass = pass(this.scene, this.camera);
@@ -182,6 +182,7 @@ class App {
 
         this.particleRenderer.object.visible = !conf.points;
         this.pointRenderer.object.visible = conf.points;
+        this.backgroundGeometry.object.visible = conf.containParticles;
 
         this.controls.update(delta);
         this.lights.update(elapsed);

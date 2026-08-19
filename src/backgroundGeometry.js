@@ -3,7 +3,8 @@ import {
     Fn,
     texture,
     uv,
-    positionWorld
+    positionWorld,
+    vec3,
 } from "three/tsl";
 import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -75,7 +76,7 @@ class BackgroundGeometry {
             return texture(aoMap, uv()).mul(positionWorld.z.div(0.4).mul(0.95).oneMinus());
         })();
         material.colorNode = Fn(() => {
-            return texture(map, uv()).mul(positionWorld.z.div(0.4).mul(0.5).oneMinus().mul(0.7));
+            return vec3(0.01);
         })();
 
 
