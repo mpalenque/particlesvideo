@@ -15,14 +15,13 @@ class PointRenderer {
         this.geometry.setAttribute('position', positionBuffer);
         this.object = new THREE.Points(this.geometry, material);
         material.positionNode = Fn(() => {
-            return this.mlsMpmSim.particleBuffer.element(instanceIndex).get('position').mul(vec3(1,1,0.4));
+            return this.mlsMpmSim.particleBuffer.element(instanceIndex).get('position');
         })();
 
         this.object.frustumCulled = false;
 
-        const s = (1/64);
-        this.object.position.set(-32.0*s,0,0);
-        this.object.scale.set(s,s,s);
+        this.object.position.set(-4,0,0);
+        this.object.scale.set(8 / 64, 3 / 64, 3 / 64);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
     }

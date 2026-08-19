@@ -32,6 +32,22 @@ class BackgroundGeometry {
     async init() {
         const objectRaw = new OBJLoader().parse(boxObj);
         const geometry = BufferGeometryUtils.mergeVertices(objectRaw.children[0].geometry);
+        const positionArray = geometry.attributes.position.array;
+        const outerX = 0.550658;
+        const outerY = 1.100658;
+        const borderScale = 0.4;
+
+        for (let index = 0; index < positionArray.length; index += 3) {
+            const x = positionArray[index];
+            const y = positionArray[index + 1];
+
+            positionArray[index] = Math.sign(x) * (outerX - (outerX - Math.abs(x)) * borderScale);
+            positionArray[index + 1] = y < outerY / 2
+                ? y * borderScale
+                : outerY - (outerY - y) * borderScale;
+        }
+        geometry.attributes.position.needsUpdate = true;
+        geometry.computeVertexNormals();
         const uvArray = geometry.attributes.uv.array;
         for (let i=0; i<uvArray.length; i++) {
             uvArray[i] *= 10;
@@ -65,12 +81,23 @@ class BackgroundGeometry {
 
         this.box = new THREE.Mesh(geometry, material);
         this.box.rotation.set(0, Math.PI, 0);
-        this.box.position.set(0, -0.05, 0.22);
+        const depthScale = 3 / 0.451689;
+        this.box.position.set(0, 0, 0.201031 * depthScale);
+        this.box.scale.set(8 / 1.10132, 3 / 1.10132, depthScale);
         this.box.castShadow = true;
         this.box.receiveShadow = true;
 
         this.object = new THREE.Object3D();
         this.object.add(this.box);
+
+        const backMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            side: THREE.DoubleSide,
+            toneMapped: false,
+        });
+        this.backPanel = new THREE.Mesh(new THREE.PlaneGeometry(8, 3), backMaterial);
+        this.backPanel.position.set(0, 1.5, 2.99);
+        this.object.add(this.backPanel);
     }
 }
 export default BackgroundGeometry;

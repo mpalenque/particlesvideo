@@ -12,6 +12,8 @@ import ParticleRenderer from "./mls-mpm/particleRenderer";
 import BackgroundGeometry from "./backgroundGeometry";
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import PointRenderer from "./mls-mpm/pointRenderer.js";
+import ImageUploadManager from "./imageUploadManager.js";
+import SourceMediaPlane from "./sourceMediaPlane.js";
 
 const loadHdr = async (file) => {
     const texture = await new Promise(resolve => {
@@ -35,6 +37,8 @@ class App {
 
     lights = null;
 
+    imageUploadManager = null;
+
     constructor(renderer) {
         this.renderer = renderer;
     }
@@ -43,20 +47,24 @@ class App {
         this.info = new Info();
         conf.init();
 
-        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 5);
-        this.camera.position.set(0, 0.5, -1);
+        // Initialize image upload manager
+        this.imageUploadManager = new ImageUploadManager();
+        await this.imageUploadManager.init();
+
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 20);
+        this.camera.position.set(0, 1.5, -7);
         this.camera.updateProjectionMatrix()
 
         this.scene = new THREE.Scene();
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.target.set(0,0.5,0.2);
+        this.controls.target.set(0,1.5,1.5);
         this.controls.enableDamping = true;
         this.controls.enablePan = false;
         this.controls.touches = {
             TWO: THREE.TOUCH.DOLLY_ROTATE,
         }
-        this.controls.maxDistance = 2.0;
+        this.controls.maxDistance = 12.0;
         this.controls.minPolarAngle = 0.2 * Math.PI;
         this.controls.maxPolarAngle = 0.8 * Math.PI;
         this.controls.minAzimuthAngle = 0.7 * Math.PI;
@@ -66,8 +74,7 @@ class App {
 
         const hdriTexture = await loadHdr(hdri);
 
-        this.scene.background = hdriTexture; //bgNode.mul(2);
-        this.scene.backgroundRotation = new THREE.Euler(0,2.15,0);
+        this.scene.background = new THREE.Color(0x000000);
         this.scene.environment = hdriTexture;
         this.scene.environmentRotation = new THREE.Euler(0,-2.15,0);
         this.scene.environmentIntensity = 0.5;
@@ -81,6 +88,28 @@ class App {
 
         this.mlsMpmSim = new MlsMpmSimulator(this.renderer);
         await this.mlsMpmSim.init();
+
+        this.sourceMediaPlane = new SourceMediaPlane();
+        this.scene.add(this.sourceMediaPlane.object);
+
+        // Register callback for when image is loaded
+        this.imageUploadManager.setOnImageLoadedCallback(() => {
+            this.mlsMpmSim.initializeFromImage(this.imageUploadManager);
+            this.imageUploadManager.displayImage();
+            this.sourceMediaPlane.setSource(this.imageUploadManager);
+        });
+
+        // Register callback for when reset is clicked
+        this.imageUploadManager.setOnResetCallback(() => {
+            this.mlsMpmSim.resetParticlesToSphere();
+            this.sourceMediaPlane.clear();
+        });
+
+        // Register callback for when re-emit is clicked
+        this.imageUploadManager.setOnReEmitCallback(() => {
+            this.mlsMpmSim.initializeFromImage(this.imageUploadManager);
+        });
+
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
         this.pointRenderer = new PointRenderer(this.mlsMpmSim);
@@ -124,7 +153,7 @@ class App {
 
 
         this.raycaster = new THREE.Raycaster();
-        this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
+        this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1.5);
         this.renderer.domElement.addEventListener("pointermove", (event) => { this.onMouseMove(event); });
 
         await progressCallback(1.0, 100);
@@ -158,6 +187,13 @@ class App {
         this.lights.update(elapsed);
         this.particleRenderer.update();
         this.pointRenderer.update();
+
+        // Sync video playback speed from conf
+        this.imageUploadManager.updateVideoPlaybackSpeed();
+
+        // Update image display for video frames
+        this.imageUploadManager.updateImageDisplay();
+        this.sourceMediaPlane.update(this.imageUploadManager.getImageData());
 
         await this.mlsMpmSim.update(delta,elapsed);
 

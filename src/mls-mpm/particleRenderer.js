@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, vec4, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, vec4, float, uint, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {conf} from "../conf";
 
@@ -119,13 +119,11 @@ class ParticleRenderer {
         this.geometry.setDrawRange(0, this.defaultIndexCount);
         this.geometry.instanceCount = this.mlsMpmSim.numParticles;
 
-        this.material = new THREE.MeshStandardNodeMaterial({
-            metalness: 0.900,
-            roughness: 0.50,
-            //iridescence: 1.0,
-        });
+        this.material = new THREE.MeshBasicNodeMaterial();
 
         this.uniforms.size = uniform(1);
+        this.uniforms.length = uniform(1);
+        this.uniforms.minimumBrightness = uniform(0.12);
         const vAo = varying(0, "vAo");
         const vNormal = varying(vec3(0), "v_normalView");
 
@@ -134,6 +132,7 @@ class ParticleRenderer {
             const particlePosition = particle.get("position");
             const particleDensity = particle.get("density");
             const particleDirection = particle.get("direction");
+            const particleAlive = particle.get("alive").equal(uint(1));
 
             //return attribute("position").xyz.mul(10).add(vec3(32,32,0));
             //return attribute("position").xyz.mul(0.1).add(positionAttribute.mul(vec3(1,1,0.4)));
@@ -141,9 +140,9 @@ class ParticleRenderer {
             vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
             vAo.assign(particlePosition.z.div(64));
             vAo.assign(vAo.mul(vAo).oneMinus());
-            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).add(particlePosition.mul(vec3(1,1,0.4)));
+            return mat.mul(attribute("position").xyz.mul(this.uniforms.size).mul(vec3(1 / 8, 1 / 3, this.uniforms.length))).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).mul(float(particleAlive)).add(particlePosition);
         })();
-        this.material.colorNode = particle.get("color");
+        this.material.colorNode = particle.get("color").max(vec3(this.uniforms.minimumBrightness));
         this.material.aoNode = vAo;
 
         //this.material.fragmentNode = vec4(0,0,0,1);
@@ -156,16 +155,17 @@ class ParticleRenderer {
 
         this.object.frustumCulled = false;
 
-        const s = (1/64);
-        this.object.position.set(-32.0*s,0,0);
-        this.object.scale.set(s,s,s);
+        this.object.position.set(-4,0,0);
+        this.object.scale.set(8 / 64, 3 / 64, 3 / 64);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
     }
 
     update() {
-        const { particles, bloom, actualSize } = conf;
+        const { particles, bloom, actualSize, particleLength } = conf;
         this.uniforms.size.value = actualSize;
+        this.uniforms.length.value = particleLength;
+        this.uniforms.minimumBrightness.value = conf.minimumParticleBrightness;
         this.geometry.instanceCount = particles;
 
         if (bloom !== this.bloom) {

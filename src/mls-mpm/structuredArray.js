@@ -72,6 +72,42 @@ export class StructuredArray {
         }
     }
 
+    updateRange(index) {
+        const offset = index * this.structSize;
+        this.buffer.value.addUpdateRange(offset, this.structSize);
+        this.buffer.value.needsUpdate = true;
+    }
+
+    updateRanges(indices) {
+        if (indices.length === 0) return;
+
+        const sortedIndices = [...new Set(indices)].sort((left, right) => left - right);
+        let rangeStart = sortedIndices[0];
+        let rangeEnd = rangeStart;
+
+        for (let index = 1; index <= sortedIndices.length; index++) {
+            const particleIndex = sortedIndices[index];
+            if (particleIndex === rangeEnd + 1) {
+                rangeEnd = particleIndex;
+                continue;
+            }
+
+            const offset = rangeStart * this.structSize;
+            const count = (rangeEnd - rangeStart + 1) * this.structSize;
+            this.buffer.value.addUpdateRange(offset, count);
+            rangeStart = particleIndex;
+            rangeEnd = particleIndex;
+        }
+
+        this.buffer.value.needsUpdate = true;
+    }
+
+    updateAll() {
+        this.buffer.value.clearUpdateRanges();
+        this.buffer.value.addUpdateRange(0, this.floatArray.length);
+        this.buffer.value.needsUpdate = true;
+    }
+
     element(index) {
         return this.buffer.element(index);
     }
