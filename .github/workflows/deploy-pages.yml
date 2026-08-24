@@ -31,11 +31,24 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install flow dependencies
         run: npm ci
 
-      - name: Build
+      - name: Build flow
         run: npm run build
+
+      - name: Install poly dependencies
+        run: npm ci
+        working-directory: poly
+
+      - name: Build poly
+        run: npm run build
+        working-directory: poly
+
+      - name: Merge poly build into flow's output
+        run: |
+          mkdir -p dist/poly
+          cp -r poly/dist/. dist/poly/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
