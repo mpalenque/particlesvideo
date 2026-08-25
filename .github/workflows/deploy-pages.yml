@@ -50,6 +50,19 @@ jobs:
           mkdir -p dist/poly
           cp -r poly/dist/. dist/poly/
 
+      - name: Install moon simulator dependencies
+        run: npm ci
+        working-directory: moon-simulator
+
+      - name: Build moon simulator
+        run: npm run build
+        working-directory: moon-simulator
+
+      - name: Merge moon simulator build into flow's output
+        run: |
+          mkdir -p dist/moon-simulator
+          cp -r moon-simulator/dist/. dist/moon-simulator/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
