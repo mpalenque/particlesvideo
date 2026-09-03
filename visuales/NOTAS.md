@@ -291,3 +291,32 @@ no un número intermedio.
 
 Costo: sin cambio medible (242 fps con partículas + AO + luces, escena 13). Las 23 escenas siguen
 a 60 fps.
+
+## Bloques rojos, debris y persistencia de ajustes
+
+- **Bloques rojos (escenas 14/15)**: `redBlock.height` 2.4 → 7 m y param nuevo `redBlock.y`
+  (centro, default 1.5). La pantalla va de y=0 a y=3, así que el bloque va de −2 a 5 y **se pasa
+  por arriba y por abajo**: nunca se le ven los bordes horizontales y lee como bloque entero.
+  `redBlock.width` 2.2 → 3.2. Es un desvío deliberado del storyboard (ahí estaba apoyado en el
+  piso), pedido por Manuel.
+- **Debris (escenas 17+)**: ahora vuela y se apaga **en el aire**, sin llegar al piso.
+  `debris.lifetime` 3 → 0.9 s, `debris.floorCollision` nuevo (default false; en true vuelve el
+  rebote y la fricción de antes) y `debris.fadeFraction` (0.7) para que el fade sea largo y visible.
+  El chequeo del piso solo corre **mientras bajan**: nacen a ras del suelo y suben, así que mirar
+  la altura sin más las mataba en el frame en que se creaban. Medido: antes llegaban a y = −1.45 m
+  (se hundían bajo el piso y se veían por los huecos entre dashes); ahora el mínimo es 0.002 m,
+  suben hasta 0.79 m y ninguna queda apoyada.
+- **Los ajustes del editor se guardan solos** (`core/Settings.js`). Los mapeos ya se guardaban;
+  lo que se perdía al recargar eran los params de los sliders.
+
+  La clave es que se guarda como **default** del param, no solo como valor actual: `goto` cae en el
+  default cuando ni la escena ni BASE listan el param, así que pisar el default es lo que hace que
+  el ajuste sobreviva al próximo cambio de escena. Si la escena SÍ lista el param, la escena sigue
+  ganando — que es lo correcto, el look de esa escena está definido en `scenes/index.js`.
+
+  Solo se registra lo que viene del editor (`{t:'set'}` por el bus). Lo que cambian las escenas, el
+  MIDI/OSC o la simulación (por ejemplo `box.yaw` girando con `box.yawSpeed`) no se guarda, si no el
+  archivo crecería con estado que cambia 60 veces por segundo. Se excluyen además `scene.current`,
+  `line.x` y `floor.revealDist`, que son estado vivo y no configuración.
+  Botón **"Restaurar ajustes de fábrica"** en el editor. Verificado con `tools/smoke-persist.mjs`:
+  ajustar → recargar → siguen; restaurar → vuelven los valores de fábrica.

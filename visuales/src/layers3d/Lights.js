@@ -3,16 +3,21 @@ import * as THREE from 'three/webgpu';
 // Iluminación de la capa 3D. Existe para que los palitos tengan volumen (antes eran
 // MeshBasicNodeMaterial, planos). Todo es param para poder animarlo en vivo desde
 // MIDI/OSC más adelante: posición, color e intensidad de la luz principal.
+//
+// Los niveles bajaron (principal 3.2 → 2.6, ambiente 0.55 → 0.32): con un color base saturado
+// como el rojo puro, el canal R saturaba en casi toda la masa y ahí se perdían tanto el
+// degradado de la luz como la oclusión. Menos luz de relleno = más rango útil para el AO.
+// El brillo general se recupera con `master.brightness`, que no aplasta el contraste.
 export class Lights {
   static defineParams(params) {
-    params.define({ id: 'light.ambient', type: 'float', min: 0, max: 3, default: 0.55, label: 'Ambiente', group: 'light', sceneReset: false });
+    params.define({ id: 'light.ambient', type: 'float', min: 0, max: 3, default: 0.32, label: 'Ambiente', group: 'light', sceneReset: false });
     params.define({ id: 'light.ambientColor', type: 'color', default: '#8899BB', label: 'Color ambiente', group: 'light', sceneReset: false });
-    params.define({ id: 'light.key', type: 'float', min: 0, max: 10, default: 3.2, label: 'Luz principal', group: 'light', sceneReset: false });
+    params.define({ id: 'light.key', type: 'float', min: 0, max: 10, default: 2.6, label: 'Luz principal', group: 'light', sceneReset: false });
     params.define({ id: 'light.keyColor', type: 'color', default: '#FFFFFF', label: 'Color principal', group: 'light', sceneReset: false });
     params.define({ id: 'light.keyX', type: 'float', min: -8, max: 8, default: -2.5, label: 'Principal X (m)', group: 'light', sceneReset: false });
     params.define({ id: 'light.keyY', type: 'float', min: 0, max: 8, default: 4.0, label: 'Principal Y (m)', group: 'light', sceneReset: false });
     params.define({ id: 'light.keyZ', type: 'float', min: -8, max: 8, default: 2.5, label: 'Principal Z (m)', group: 'light', sceneReset: false });
-    params.define({ id: 'light.fill', type: 'float', min: 0, max: 10, default: 1.1, label: 'Relleno', group: 'light', sceneReset: false });
+    params.define({ id: 'light.fill', type: 'float', min: 0, max: 10, default: 0.75, label: 'Relleno', group: 'light', sceneReset: false });
     params.define({ id: 'light.fillColor', type: 'color', default: '#4466AA', label: 'Color relleno', group: 'light', sceneReset: false });
   }
 
@@ -24,9 +29,9 @@ export class Lights {
   }
 
   async init(scene) {
-    this.ambient = new THREE.AmbientLight(0x8899bb, 0.55);
-    this.key = new THREE.DirectionalLight(0xffffff, 3.2);
-    this.fill = new THREE.DirectionalLight(0x4466aa, 1.1);
+    this.ambient = new THREE.AmbientLight(0x8899bb, 0.32);
+    this.key = new THREE.DirectionalLight(0xffffff, 2.6);
+    this.fill = new THREE.DirectionalLight(0x4466aa, 0.75);
     this.fill.position.set(3.5, 2.0, -3.0);
     scene.add(this.ambient, this.key, this.fill);
   }

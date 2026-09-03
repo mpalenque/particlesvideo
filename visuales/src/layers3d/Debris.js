@@ -3,6 +3,11 @@ import { uniform, mrt, vec3 } from 'three/tsl';
 
 const MAX = 4000;
 
+// A qué altura del piso empiezan a apagarse las esquirlas cuando ya vienen bajando.
+// Sin esto llegaban a y = −1.45 m: se hundían por debajo del piso y se veían por los huecos
+// entre los dashes. Ahora se desvanecen en el aire y mueren al tocar y = 0.
+const ALTURA_FADE_M = 0.3;
+
 // Esquirlas blancas en el piso (escenas 17+). Simuladas en CPU: son pocas y baratas,
 // y así rebotan y se deslizan con control fino. Todo preasignado: nada se crea por frame.
 export class Debris {
@@ -11,7 +16,11 @@ export class Debris {
     params.define({ id: 'debris.count', type: 'int', min: 0, max: 300, default: 60, label: 'Por impacto', group: 'debris' });
     params.define({ id: 'debris.size', type: 'float', min: 0.01, max: 0.3, default: 0.06, label: 'Tamaño (m)', group: 'debris' });
     params.define({ id: 'debris.speed', type: 'float', min: 0, max: 8, default: 2, label: 'Velocidad (m/s)', group: 'debris' });
-    params.define({ id: 'debris.lifetime', type: 'float', min: 0.2, max: 10, default: 3, label: 'Duración (s)', group: 'debris' });
+    params.define({ id: 'debris.lifetime', type: 'float', min: 0.1, max: 10, default: 0.9, label: 'Duración (s)', group: 'debris' });
+    params.define({ id: 'debris.fadeFraction', type: 'float', min: 0.05, max: 1, default: 0.7, label: 'Fracción de fade', group: 'debris' });
+    // Con false (default) las esquirlas vuelan y se apagan en el aire, sin llegar al piso.
+    // El rebote y la fricción quedan disponibles por si se quiere el comportamiento viejo.
+    params.define({ id: 'debris.floorCollision', type: 'bool', default: false, label: 'Choca con el piso', group: 'debris' });
     params.define({ id: 'debris.gravity', type: 'float', min: 0, max: 20, default: 6, label: 'Gravedad', group: 'debris' });
     params.define({ id: 'debris.bounce', type: 'float', min: 0, max: 1, default: 0.4, label: 'Rebote', group: 'debris' });
     params.define({ id: 'debris.friction', type: 'float', min: 0, max: 1, default: 0.9, label: 'Fricción', group: 'debris' });
@@ -86,6 +95,8 @@ export class Debris {
     const friction = p.get('debris.friction');
     const size = p.get('debris.size');
     const lifetime = Math.max(p.get('debris.lifetime'), 0.001);
+    const floorCollision = p.get('debris.floorCollision');
+    const fadeFraction = Math.max(p.get('debris.fadeFraction'), 0.01);
 
     let anyAlive = false;
     for (let i = 0; i < MAX; i++) {
@@ -100,11 +111,20 @@ export class Debris {
 
       const ix = i * 3;
       this.vel[ix + 1] -= gravity * dt;
+      // Solo se controla el piso mientras BAJAN: nacen a ras del suelo y suben, así que
+      // mirar la altura sin más las mataría en el mismo frame en que se crean.
+      const bajando = this.vel[ix + 1] < 0;
       this.pos[ix] += this.vel[ix] * dt;
       this.pos[ix + 1] += this.vel[ix + 1] * dt;
       this.pos[ix + 2] += this.vel[ix + 2] * dt;
 
-      if (this.pos[ix + 1] <= 0.01) {
+      if (!floorCollision && bajando && this.pos[ix + 1] <= 0) {
+        this.life[i] = 0;
+        this.mesh.setMatrixAt(i, this._m.identity().scale(this._zero));
+        continue;
+      }
+
+      if (floorCollision && this.pos[ix + 1] <= 0.01) {
         this.pos[ix + 1] = 0.01;
         this.vel[ix + 1] *= -bounce;
         this.vel[ix] *= friction;
@@ -116,7 +136,9 @@ export class Debris {
       this._e.set(this.grounded[i] ? -Math.PI / 2 : 0, this.yaw[i], 0);
       this._q.setFromEuler(this._e);
       this._p.set(this.pos[ix], this.pos[ix + 1], this.pos[ix + 2]);
-      const fade = Math.min(this.life[i] / (lifetime * 0.3), 1);
+      const fadeVida = Math.min(this.life[i] / (lifetime * fadeFraction), 1);
+      const fadeAltura = (!floorCollision && bajando) ? Math.min(this.pos[ix + 1] / ALTURA_FADE_M, 1) : 1;
+      const fade = Math.max(Math.min(fadeVida, fadeAltura), 0);
       this._s.setScalar(size * fade);
       this.mesh.setMatrixAt(i, this._m.compose(this._p, this._q, this._s));
     }

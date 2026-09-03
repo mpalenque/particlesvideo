@@ -16,7 +16,11 @@ export class Forces {
     params.define({ id: 'particles.flowZ', type: 'float', min: -3, max: 3, default: 0, label: 'Flujo Z', group: 'particles' });
     params.define({ id: 'particles.drag', type: 'float', min: 0, max: 1, default: 0, label: 'Rozamiento', group: 'particles' });
     params.define({ id: 'particles.wrapMode', type: 'enum', options: ['off', 'vertical'], default: 'off', label: 'Emisión continua', group: 'particles' });
-    params.define({ id: 'particles.wrapTop', type: 'float', min: 0, max: 4, default: 3.5, label: 'Tope wrap (m)', group: 'particles' });
+    // Ya no es un techo absoluto: es cuántos metros por ENCIMA del borde superior del encuadre
+    // se recicla la partícula. El simulador lo suma a la recta del borde (que sube con la
+    // profundidad), así que el chorro siempre se sale de cuadro antes de reaparecer abajo.
+    params.define({ id: 'particles.wrapTop', type: 'float', min: 0, max: 4, default: 0.5, label: 'Margen fuera de cuadro (m)', group: 'particles' });
+    params.define({ id: 'particles.emitSpread', type: 'float', min: 0, max: 2, default: 0.4, label: 'Alto del emisor (m)', group: 'particles' });
     params.define({ id: 'particles.kickAmount', type: 'float', min: 0, max: 3, default: 1, label: 'Golpe', group: 'particles' });
     params.define({ id: 'particles.kickDecay', type: 'float', min: 0.05, max: 3, default: 0.4, label: 'Caída del golpe (s)', group: 'particles' });
     params.defineAction({ id: 'particles.kick', label: 'Golpe de turbulencia', group: 'particles' });
@@ -53,7 +57,6 @@ export class Forces {
       vortexSwirl: uniform(0), vortexPull: uniform(0), vortexLift: uniform(0),
       vortexRadius: uniform(1), vortexCenter: uniform(new THREE.Vector2()),
       wrapMode: uniform(0, 'uint'),
-      wrapTop: uniform(0),
       noiseScale: uniform(0.015),
       noiseSpeed: uniform(0.5),
     };
@@ -150,7 +153,6 @@ export class Forces {
     u.vortexCenter.value.set((p.get('vortex.x') - m[0]) / cellSize, (p.get('vortex.z') - m[2]) / cellSize);
 
     u.wrapMode.value = p.get('particles.wrapMode') === 'vertical' ? 1 : 0;
-    u.wrapTop.value = (p.get('particles.wrapTop') - m[1]) / cellSize;
 
     // Se recorren siempre todos los slots: los vacíos tienen fuerza 0 y no aportan.
     u.attractorCount.value = MAX_ATTRACTORS;

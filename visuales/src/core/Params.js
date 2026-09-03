@@ -75,6 +75,15 @@ export class Params {
     if (changed) this._notifyChange(p);
   }
 
+  // Cambia el valor de fábrica de un param. Lo usa Settings para que un ajuste hecho en el
+  // editor sobreviva a los cambios de escena: `goto` cae en el default cuando ni la escena ni
+  // BASE listan el param, así que pisar el default es lo que hace que el ajuste "quede".
+  setDefault(id, value) {
+    const p = this.defs.get(id);
+    if (!p) return;
+    p.default = this._coerce(p, value);
+  }
+
   setNormalized(id, n01) {
     const p = this.defs.get(id);
     if (!p) { console.error(`[vis] param desconocido: ${id}`); return; }

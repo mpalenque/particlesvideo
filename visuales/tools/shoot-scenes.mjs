@@ -54,8 +54,10 @@ await sleep(7000);
 
 // [nombre, expresión previa, espera en ms]
 const SHOTS = [
-  ['1', "vis.scenes.goto('1',{transition:0})", 1500],
-  ['1b', "vis.params.trigger('warning.bgOff')", 2500],
+  ['14', "vis.scenes.goto('14',{transition:0})", 5000],
+  ['15', "vis.scenes.goto('15',{transition:0})", 5000],
+  ['17-debris', "vis.scenes.goto('17',{transition:0});for(let i=0;i<8;i++) setTimeout(()=>vis.params.trigger('ray.spawn','random'), i*60)", 1700],
+  ['17-debris2', '', 500],
 ];
 
 for (const [name, expr, wait] of SHOTS) {

@@ -8,8 +8,12 @@ export class RedBlock {
     params.define({ id: 'redBlock.side', type: 'enum', options: ['left', 'right'], default: 'left', label: 'Lado', group: 'redBlock' });
     params.define({ id: 'redBlock.x', type: 'float', min: 0, max: 6, default: 3.3, label: 'X (m)', group: 'redBlock' });
     params.define({ id: 'redBlock.z', type: 'float', min: -5, max: 0, default: -1.0, label: 'Z (m)', group: 'redBlock' });
-    params.define({ id: 'redBlock.width', type: 'float', min: 0.2, max: 6, default: 2.2, label: 'Ancho (m)', group: 'redBlock' });
-    params.define({ id: 'redBlock.height', type: 'float', min: 0.2, max: 6, default: 2.4, label: 'Alto (m)', group: 'redBlock' });
+    params.define({ id: 'redBlock.width', type: 'float', min: 0.2, max: 12, default: 3.2, label: 'Ancho (m)', group: 'redBlock' });
+    // Alto y centro pensados para que el bloque SE PASE del cuadro por arriba y por abajo
+    // (la pantalla va de y=0 a y=3): centrado en 1.5 con 7 m de alto va de -2 a 5, así que
+    // nunca se le ven los bordes horizontales y lee como un bloque entero, no como un rectángulo.
+    params.define({ id: 'redBlock.height', type: 'float', min: 0.2, max: 16, default: 7.0, label: 'Alto (m)', group: 'redBlock' });
+    params.define({ id: 'redBlock.y', type: 'float', min: -4, max: 6, default: 1.5, label: 'Centro Y (m)', group: 'redBlock' });
     params.define({ id: 'redBlock.yaw', type: 'float', min: -90, max: 90, default: 20, label: 'Giro (°)', group: 'redBlock' });
     params.define({ id: 'redBlock.color', type: 'color', default: '#B00000', label: 'Color', group: 'redBlock' });
     params.define({ id: 'redBlock.attract', type: 'float', min: 0, max: 10, default: 0, label: 'Atracción', group: 'redBlock' });
@@ -45,7 +49,7 @@ export class RedBlock {
     const x = sign * p.get('redBlock.x');
     const z = p.get('redBlock.z');
     const height = p.get('redBlock.height');
-    this._center.set(x, height / 2, z);
+    this._center.set(x, p.get('redBlock.y'), z);
 
     if (this.mesh.visible) {
       const color = p.get('redBlock.color');

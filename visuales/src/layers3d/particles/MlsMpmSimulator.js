@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   array, Fn, If, instanceIndex, instancedArray, Return, uniform, int, float, Loop, vec3, vec4,
-  atomicAdd, uint, max, pow, mat3, clamp, time, mix, ivec3, hash, cos, sin, select,
+  atomicAdd, uint, max, pow, mat3, clamp, time, mix, ivec3, hash, cos, sin, select, normalize,
 } from 'three/tsl';
 import { triNoise3Dvec } from './noise.js';
 import { StructuredArray } from './StructuredArray.js';
@@ -37,7 +37,7 @@ export class MlsMpmSimulator {
 
   static defineParams(params) {
     params.define({ id: 'particles.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Partículas', group: 'particles' });
-    params.define({ id: 'particles.count', type: 'int', min: 4096, max: STAGE.sim.maxParticles, step: 4096, default: 262144, label: 'Cantidad', group: 'particles', sceneReset: false });
+    params.define({ id: 'particles.count', type: 'int', min: 4096, max: STAGE.sim.maxParticles, step: 4096, default: 131072, label: 'Cantidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.baseColor', type: 'color', default: '#FF0000', label: 'Color base', group: 'particles' });
     params.define({ id: 'particles.whiteSpeedMin', type: 'float', min: 0, max: 20, default: 2, label: 'Blanco desde', group: 'particles' });
     params.define({ id: 'particles.whiteSpeedMax', type: 'float', min: 0, max: 40, default: 7, label: 'Blanco hasta', group: 'particles' });
@@ -54,9 +54,14 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.bloom', type: 'float', min: 0, max: 1, default: 1, label: 'Bloom', group: 'particles' });
     params.define({ id: 'particles.ageGrow', type: 'float', min: 0.05, max: 6, default: 1.2, label: 'Crecer con la edad (s)', group: 'particles' });
     params.define({ id: 'particles.sizeJitter', type: 'float', min: 0, max: 1, default: 0.45, label: 'Variación de tamaño', group: 'particles' });
+    params.define({ id: 'particles.taper', type: 'float', min: 0, max: 0.95, default: 0.55, label: 'Punta (cola más fina)', group: 'particles' });
+    params.define({ id: 'particles.headTail', type: 'float', min: 0, max: 1, default: 0.5, label: 'Degradado cabeza/cola', group: 'particles' });
+    params.define({ id: 'particles.whiteJitter', type: 'float', min: 0, max: 2, default: 0.7, label: 'Dispersión del blanco', group: 'particles' });
     params.define({ id: 'particles.roughness', type: 'float', min: 0, max: 1, default: 0.55, label: 'Rugosidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.metalness', type: 'float', min: 0, max: 1, default: 0, label: 'Metalicidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.emissive', type: 'float', min: 0, max: 2, default: 0.15, label: 'Emisión propia', group: 'particles' });
+    params.define({ id: 'particles.speedSmooth', type: 'float', min: 0.5, max: 40, default: 6, label: 'Suavizado de velocidad (1/s)', group: 'particles', sceneReset: false });
+    params.define({ id: 'particles.turnRate', type: 'float', min: 0.5, max: 40, default: 8, label: 'Giro del palito (1/s)', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.flicker', type: 'float', min: 0, max: 1, default: 0, label: 'Titileo', group: 'particles' });
     params.define({ id: 'particles.flickerRate', type: 'float', min: 0.1, max: 40, default: 9, label: 'Titileo (Hz)', group: 'particles' });
     params.defineAction({ id: 'particles.resetInBox', label: 'Reubicar en la caja', group: 'particles' });
@@ -81,6 +86,10 @@ export class MlsMpmSimulator {
       C: { type: 'mat3' },
       direction: { type: 'vec3' },
       age: { type: 'float' },
+      // Rapidez suavizada en el tiempo. El renderer la usa para la mezcla a blanco: la
+      // velocidad cruda sale de interpolar la grilla, así que todas las partículas de una
+      // celda comparten valor y la transición se veía en bloques del tamaño de la celda.
+      speedSmooth: { type: 'float' },
       alive: { type: 'uint' },
     };
     this.particleBuffer = new StructuredArray(particleStruct, maxParticles, 'particleData');
@@ -107,6 +116,11 @@ export class MlsMpmSimulator {
     u.gridSize = uniform(this.gridSize, 'ivec3');
     u.dt = uniform(0.1);
     u.frameTime = uniform(0);   // dt real en segundos, para la edad
+    u.speedSmooth = uniform(6);
+    u.turnRate = uniform(8);
+    u.wrapA = uniform(0);         // techo del encuadre en grilla: y = wrapA + wrapB·z
+    u.wrapB = uniform(0);
+    u.emitSpread = uniform(4);    // alto de la banda de emisión, en celdas
     u.numParticles = uniform(0, 'uint');
 
     u.boxEnabled = uniform(0, 'uint');
@@ -339,28 +353,61 @@ export class MlsMpmSimulator {
 
       // Emisión continua (escena 12): al salir por arriba reaparece abajo con x/z al azar.
       // Todo en GPU: sin loops de CPU ni subir 25 MB de buffers por frame.
+      //
+      // El techo NO es un plano horizontal fijo: es el borde superior del encuadre, que en
+      // perspectiva sube con la profundidad (una partícula a 2 m de fondo tiene que llegar más
+      // alto que una al frente para salirse del cuadro). La CPU manda la recta y = A + B·z en
+      // unidades de grilla; acá se evalúa por partícula. Así el flujo se va de pantalla de
+      // verdad en vez de amontonarse contra un límite visible.
       const f = this.forces.u;
       If(f.wrapMode.equal(uint(1)), () => {
-        const top = select(u.boxEnabled.equal(uint(1)), u.boxCenter.y.add(u.boxHalf.y), f.wrapTop);
+        const screenTop = u.wrapA.add(u.wrapB.mul(pos.z)).toConst('screenTop');
+        const top = select(u.boxEnabled.equal(uint(1)), u.boxCenter.y.add(u.boxHalf.y), screenTop);
         const bottom = select(u.boxEnabled.equal(uint(1)), u.boxCenter.y.sub(u.boxHalf.y), float(2));
         If(pos.y.greaterThan(top), () => {
           const seed = instanceIndex.add(u.resetSeed);
-          const rx = hash(seed.mul(uint(2))).sub(0.5).mul(2);
-          const rz = hash(seed.mul(uint(2)).add(uint(1))).sub(0.5).mul(2);
-          const halfX = select(u.boxEnabled.equal(uint(1)), u.boxHalf.x, float(20));
-          const halfZ = select(u.boxEnabled.equal(uint(1)), u.boxHalf.z, float(20));
-          pos.assign(vec3(u.boxCenter.x.add(rx.mul(halfX)), bottom.add(0.5), u.boxCenter.z.add(rz.mul(halfZ))));
+          const rx = hash(seed.mul(uint(3))).sub(0.5).mul(2);
+          const rz = hash(seed.mul(uint(3)).add(uint(1))).sub(0.5).mul(2);
+          const ry = hash(seed.mul(uint(3)).add(uint(2)));
+          // La huella del emisor es la de la caja aunque el límite esté apagado: así se
+          // encuadra el chorro con box.width / box.depth sin volver a encerrar las partículas.
+          pos.assign(vec3(
+            u.boxCenter.x.add(rx.mul(u.boxHalf.x)),
+            bottom.add(0.5).add(ry.mul(u.emitSpread)),
+            u.boxCenter.z.add(rz.mul(u.boxHalf.z)),
+          ));
           pos.assign(clamp(pos, vec3(2), vec3(u.gridSize).sub(2)));
           vel.assign(f.flow);
-          this.particleBuffer.element(instanceIndex).get('C').assign(mat3(0));
-          this.particleBuffer.element(instanceIndex).get('age').assign(float(0));
+          const el = this.particleBuffer.element(instanceIndex);
+          el.get('C').assign(mat3(0));
+          el.get('age').assign(float(0));
+          el.get('speedSmooth').assign(f.flow.length());
+          // Nace ya apuntando hacia donde va: si heredara la dirección del que murió arriba,
+          // el palito recién emitido aparecería cruzado un par de décimas.
+          el.get('direction').assign(normalize(f.flow.add(vec3(0, 0.001, 0))));
         });
       });
 
       this.particleBuffer.element(instanceIndex).get('position').assign(pos);
       this.particleBuffer.element(instanceIndex).get('velocity').assign(vel);
+
+      // Heading: se guarda SIEMPRE unitario. Antes era `mix(direction, vel, 0.1)`, o sea un
+      // vector cuyo módulo era la velocidad: con la partícula casi quieta quedaba en ~0 y
+      // `normalize()` en el renderer devolvía basura (el palito temblaba sin orientación).
+      // Ahora el suavizado es por segundo real (no por frame) y ante velocidad ~0 conserva
+      // el último rumbo en vez de perderlo.
+      const speed = vel.length().toConst('speed');
       const direction = this.particleBuffer.element(instanceIndex).get('direction');
-      direction.assign(mix(direction, vel, 0.1));
+      const target = select(speed.greaterThan(float(1e-4)), vel.div(max(speed, float(1e-4))), direction);
+      const turned = mix(direction, target, clamp(u.frameTime.mul(u.turnRate), 0, 1)).toVar('turned');
+      const turnedLen = turned.length().toConst('turnedLen');
+      direction.assign(select(turnedLen.greaterThan(float(1e-5)), turned.div(turnedLen), vec3(0, 0, 1)));
+
+      // Rapidez suavizada: es la que colorea. Un promedio exponencial de ~1/speedSmooth
+      // segundos rompe la correlación temporal que hacía saltar bloques enteros a blanco.
+      const sp = this.particleBuffer.element(instanceIndex).get('speedSmooth');
+      sp.assign(mix(sp, speed, clamp(u.frameTime.mul(u.speedSmooth), 0, 1)));
+
       const age = this.particleBuffer.element(instanceIndex).get('age');
       age.assign(age.add(u.frameTime));
     })().compute(1);
@@ -387,6 +434,7 @@ export class MlsMpmSimulator {
       el.get('density').assign(float(1));
       el.get('mass').assign(float(1).sub(hash(seed).mul(0.002)));
       el.get('direction').assign(vec3(0, 0, 1));
+      el.get('speedSmooth').assign(float(0));
       // Edades repartidas al azar: si nacieran todas en 0 crecerían todas juntas y se notaría.
       el.get('age').assign(hash(seed.add(uint(31))).mul(4));
       el.get('alive').assign(uint(1));
@@ -405,6 +453,7 @@ export class MlsMpmSimulator {
       this.particleBuffer.set(i, 'mass', 1.0 - Math.random() * 0.002);
       this.particleBuffer.set(i, 'density', 1);
       this.particleBuffer.set(i, 'age', Math.random() * 4);
+      this.particleBuffer.set(i, 'direction', { x: 0, y: 0, z: 1 });
       this.particleBuffer.set(i, 'alive', 1);
     }
   }
@@ -412,6 +461,25 @@ export class MlsMpmSimulator {
   resetInBox() {
     this.uniforms.resetSeed.value = (this.uniforms.resetSeed.value + 7919) >>> 0;
     this._pendingReset = true;
+  }
+
+  // Recta del borde superior del encuadre en unidades de grilla: y = wrapA + wrapB·z.
+  // El ojo está en (eyeX, eyeY, eyeZ) y el borde de arriba de la LED en (y = heightM, z = 0),
+  // así que en el mundo el rayo que pasa por ese borde vale
+  //   yTop(z) = eyeY + (heightM − eyeY)·(eyeZ − z)/eyeZ,
+  // y `particles.wrapTop` se suma como margen para que el reciclado no se vea nunca en cuadro.
+  _updateWrapLine() {
+    const p = this.params;
+    const { min: m, cellSize } = STAGE.sim;
+    const eyeY = p.get('camera.eyeY');
+    const eyeZ = Math.max(p.get('camera.eyeZ'), 0.001);
+    const k = (STAGE.physical.heightM - eyeY) / eyeZ;      // pendiente por metro de profundidad
+    const margin = p.get('particles.wrapTop');
+    // yTop(z) = eyeY + k·(eyeZ − z) + margen, con z = m[2] + gz·cellSize.
+    const worldA = eyeY + k * (eyeZ - m[2]) + margin;
+    this.uniforms.wrapA.value = (worldA - m[1]) / cellSize;
+    this.uniforms.wrapB.value = -k;                        // en grilla la pendiente es adimensional
+    this.uniforms.emitSpread.value = p.get('particles.emitSpread') / cellSize;
   }
 
   worldToGrid(target, x, y, z) {
@@ -462,6 +530,9 @@ export class MlsMpmSimulator {
     this.forces.update(dt);
     u.dt.value = Math.min(dt, 1 / 60) * 6 * p.get('particles.speed');
     u.frameTime.value = Math.min(dt, 1 / 30);
+    u.speedSmooth.value = p.get('particles.speedSmooth');
+    u.turnRate.value = p.get('particles.turnRate');
+    this._updateWrapLine();
 
     if (this._pendingReset) {
       this._pendingReset = false;

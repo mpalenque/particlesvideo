@@ -39,7 +39,8 @@ export class Bridge {
   _onMessage(m) {
     switch (m.t) {
       case 'hi': this.post(this.hello()); break;
-      case 'set': this.params.set(m.id, m.value); break;
+      // Todo lo que se toca en el editor queda guardado al instante, sin apretar nada.
+      case 'set': this.params.set(m.id, m.value); this.ctx.settings?.record(m.id, m.value); break;
       case 'trigger': this.params.trigger(m.id, m.arg); break;
       case 'scene': this.params.trigger('scene.goto', m.id); break;
       case 'mappings': this.mapper?.setMappings(m.mappings); this.mapper?.save(); break;
@@ -48,6 +49,7 @@ export class Bridge {
       case 'oscPort': this.osc?.setPort(m.port); break;
       case 'fakeMidi': this.mapper?.dispatch(m.msg); this.midiActivity(m.msg, true); break;
       case 'save': this.mapper?.save(); break;
+      case 'resetSettings': this.ctx.settings?.clear(); break;
       case 'resetMappings': this.mapper?.resetToDefault(); break;
       default: break;
     }

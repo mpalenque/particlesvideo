@@ -18,6 +18,10 @@ export class ParamsPanel {
 
   init() {
     this.filterEl.addEventListener('input', () => this.renderReference());
+    document.getElementById('reset-settings').onclick = () => {
+      if (!confirm('¿Borrar los ajustes guardados y volver a los valores de fábrica? Hay que recargar las dos ventanas para verlo.')) return;
+      this.bus.post({ t: 'resetSettings' });
+    };
   }
 
   rebuild() {

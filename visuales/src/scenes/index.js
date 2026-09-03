@@ -105,12 +105,23 @@ export const SCENES = [
     mainAction: 'particles.resetInBox',
   },
   {
+    // Flujo continuo: SIN límite de caja (`box.enabled: false`). Con el límite puesto las
+    // partículas chocaban contra el techo invisible y se apelmazaban en un hongo dentro del
+    // cuadro. Ahora suben, se salen de pantalla por arriba y recién ahí vuelven a nacer abajo,
+    // así que lo que se ve es un chorro que no termina nunca. La caja (invisible) queda solo
+    // como encuadre del emisor: box.width / box.depth son el ancho y el fondo del chorro.
     id: '12', name: 'Flujo azul que sube', transition: 1.5,
     params: {
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
-      'box.visible': 0, 'box.enabled': true, 'box.preset': 'center',
+      'box.visible': 0, 'box.enabled': false, 'box.preset': 'center',
+      'box.width': 2.6, 'box.depth': 2.4,
       'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.3,
       'particles.flowY': 1.2, 'particles.wrapMode': 'vertical',
+      // Rozamiento: con flujo constante y sin rozamiento la velocidad crece sin techo y todo
+      // termina en blanco. Con rozamiento el chorro llega a una velocidad estable (flujo/roce)
+      // y se mantiene azul parejo; el blanco queda reservado para el golpe.
+      'particles.drag': 0.22,
+      'particles.whiteSpeedMin': 5, 'particles.whiteSpeedMax': 13,
     },
     mainAction: 'particles.kick',
   },

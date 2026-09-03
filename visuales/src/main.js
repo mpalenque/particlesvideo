@@ -3,6 +3,7 @@ import { Params } from './core/Params.js';
 import { SceneManager } from './core/SceneManager.js';
 import { Engine } from './core/Engine.js';
 import { Keyboard } from './core/Keyboard.js';
+import { Settings } from './core/Settings.js';
 import { SceneBar } from './core/SceneBar.js';
 import { Layer2D } from './layers2d/Layer2D.js';
 import { Layer3D } from './layers3d/Layer3D.js';
@@ -26,7 +27,12 @@ async function boot() {
   Layer2D.defineParams(params);
   Layer3D.defineParams(params);
 
-  const ctx = { params, stage: STAGE, renderer, scenes: null, mapper: null, bridge: null };
+  const ctx = { params, stage: STAGE, renderer, scenes: null, mapper: null, bridge: null, settings: null };
+
+  // Se restaura antes de crear nada: los elementos leen los defaults ya corregidos.
+  const settings = new Settings(params);
+  settings.load();
+  ctx.settings = settings;
 
   const scenes = new SceneManager(ctx, SCENES, BASE);
   ctx.scenes = scenes;
@@ -81,17 +87,20 @@ async function boot() {
   engine.start();
 
   window.vis = ctx;             // acceso desde la consola en desarrollo
-  Object.assign(window.vis, { engine, layer2d, layer3d, midi, osc });
+  Object.assign(window.vis, { engine, layer2d, layer3d, midi, osc, settings });
   console.info('[vis] arrancado ·', params.list().length, 'params/actions ·', mapper.mappings.length, 'mapeos');
 }
 
 // Presets de calidad: un solo control para bajar carga si hace falta. Se persiste porque
 // depende de la máquina, no del show.
+// Menos partículas que antes en todos los escalones: los palitos ahora son ~2.7× más largos
+// y ~1.7× más gruesos, así que con las cantidades viejas la caja se tapaba sola y volvía a
+// verse como un bloque plano. Menos y más grandes = se ve el palito, la oclusión y el rumbo.
 const QUALITY = {
-  ultra: { count: 524288, bloom: true },
-  high: { count: 262144, bloom: true },
-  medium: { count: 131072, bloom: true },
-  low: { count: 65536, bloom: false },
+  ultra: { count: 262144, bloom: true },
+  high: { count: 131072, bloom: true },
+  medium: { count: 65536, bloom: true },
+  low: { count: 32768, bloom: false },
 };
 
 function applyQualityPresets(params) {

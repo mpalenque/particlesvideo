@@ -90,5 +90,7 @@ input[type="search"] { width: 100%; margin-bottom: 6px; }
 #waiting[hidden] { display: none; }
 #waiting a { color: var(--accent); }
 
+.hint-inline { color: var(--dim); font-size: 11px; align-self: center; }
+
 .offline { color: var(--danger); }
 .online { color: #67d98b; }
