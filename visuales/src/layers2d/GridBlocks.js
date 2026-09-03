@@ -100,9 +100,9 @@ export class GridBlocks {
 
       b.scrollX += this.params.get(`grid.b${b.n}.dir`) * speed * this.params.get(`grid.b${b.n}.speedMul`) * dt;
 
-      // En modo grueso la celda es el bloque entero (× media pantalla de alto) → escena 3.
+      // En modo grueso la celda es un cuadrado del ancho del bloque → escena 3.
       b.u.cellW.value = coarse ? b.w : cellW;
-      b.u.cellH.value = coarse ? STAGE.height / 2 : cellH;
+      b.u.cellH.value = coarse ? b.w : cellH;
       b.u.lineWidth.value = lineWidth;
       b.u.offsetX.value = snap ? Math.round(b.scrollX) : b.scrollX;
       b.u.offsetY.value = this.params.get(`grid.b${b.n}.offsetY`);

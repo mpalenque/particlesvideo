@@ -184,3 +184,22 @@ Manuel reportó que las tiras del piso se veían pixeladas / "resampleadas". Era
    2688 reducido por el navegador, no la salida real. Ahora el escalado se hace poniendo el
    **tamaño CSS del canvas** en vez de un `transform: scale()` (filtra mejor), y **`P` alterna a
    vista 1:1** para poder juzgar nitidez de verdad. El buffer de dibujo siempre es 2688 × 1008.
+
+## Ajustes pedidos por Manuel al ver el resultado
+
+- **Línea blanca detrás del marco rojo** (escena 2): `MovingLine` pasó de `renderOrder` 20 a 6,
+  debajo del marco (10).
+- **Grillas cuadradas**: el modo grueso usaba ancho-del-bloque × media pantalla (rectangular);
+  ahora la celda es un cuadrado del ancho del bloque. Las finas de las escenas 4/5/6 pasaron de
+  84 × 63 (medido del storyboard) a 84 × 84.
+- **Los palitos se salían de la caja.** El resorte de pared era preventivo pero no garantizaba nada,
+  y con la caja moviéndose o girando se escapaban. Se agregó un **clamp final** en espacio local de
+  la caja que los deja siempre adentro, invirtiendo la velocidad normal con `box.wallBounce` (0.2).
+- **Palitos ~25 % más grandes** y **transición a blanco mucho más tardía**
+  (`whiteSpeedMin` 0.6 → 2, `whiteSpeedMax` 3 → 7): con los valores viejos apenas aceleraban
+  ya se ponían blancos y se perdía el rojo/azul de la escena.
+- **Piso más nítido y con más presencia a la distancia.** Tres cambios: dashes más gruesos
+  (carriles 0.5 → 0.7 m, ancho 0.08 → 0.15, largo 0.4 → 0.55), el `farFade` deja de comer el campo
+  medio (empieza al 85 % de `fadeFar`, que subió a 45 m) y se agregó **`floor.contrast`** (gamma
+  sobre la cobertura filtrada, default 0.45). El promedio de área es físicamente correcto pero deja
+  un gris muy oscuro lejos; el gamma lo levanta sin volver al aliasing.

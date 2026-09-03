@@ -21,6 +21,7 @@ export class BoxWire {
     params.define({ id: 'box.wallStiffness', type: 'float', min: 0, max: 2, default: 0.3, label: 'Rigidez pared', group: 'box' });
     params.define({ id: 'box.wallMaxPush', type: 'float', min: 0, max: 5, default: 1.0, label: 'Empuje máximo', group: 'box', sceneReset: false });
     params.define({ id: 'box.hardClamp', type: 'bool', default: false, label: 'Clamp duro', group: 'box', sceneReset: false });
+    params.define({ id: 'box.wallBounce', type: 'float', min: 0, max: 1, default: 0.2, label: 'Rebote en la pared', group: 'box', sceneReset: false });
     params.define({ id: 'box.flicker', type: 'bool', default: false, label: 'Titileo', group: 'box' });
     params.define({ id: 'box.flickerRate', type: 'float', min: 0.5, max: 30, default: 8, label: 'Titileo (Hz)', group: 'box' });
     params.define({ id: 'box.flickerDuty', type: 'float', min: 0, max: 1, default: 0.5, label: 'Titileo duty', group: 'box' });

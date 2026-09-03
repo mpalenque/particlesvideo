@@ -37,7 +37,7 @@ export class MovingLine {
       const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
       material.colorNode = vec4(1, 1, 1, uOpacity);
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-      mesh.renderOrder = 20;
+      mesh.renderOrder = 6;   // detrás del marco rojo (renderOrder 10)
       mesh.visible = false;
       scene.add(mesh);
       this.quads.push(mesh);

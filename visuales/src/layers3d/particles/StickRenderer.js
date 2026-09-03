@@ -85,8 +85,8 @@ const createRoundedBox = (width, height, depth, radius) => {
 // Con los defaults del plan (262144 partículas, size 2, length 1) da palitos de
 // ~3.3 mm × 2.5 cm, que es lo que se parece a STORYBOARD/10.png: masa densa pero con
 // estructura visible, no un bloque blanco.
-const BASE_THICKNESS_M = 0.0066;
-const BASE_LENGTH_M = 0.05;
+const BASE_THICKNESS_M = 0.00825;
+const BASE_LENGTH_M = 0.0625;
 const GEO = { thickness: 0.7, length: 3 };   // extents del rounded box de la geometría
 
 export class StickRenderer {

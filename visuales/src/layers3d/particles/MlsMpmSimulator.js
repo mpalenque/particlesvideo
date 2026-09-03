@@ -39,8 +39,8 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Partículas', group: 'particles' });
     params.define({ id: 'particles.count', type: 'int', min: 4096, max: STAGE.sim.maxParticles, step: 4096, default: 262144, label: 'Cantidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.baseColor', type: 'color', default: '#FF0000', label: 'Color base', group: 'particles' });
-    params.define({ id: 'particles.whiteSpeedMin', type: 'float', min: 0, max: 5, default: 0.6, label: 'Blanco desde', group: 'particles' });
-    params.define({ id: 'particles.whiteSpeedMax', type: 'float', min: 0, max: 10, default: 3.0, label: 'Blanco hasta', group: 'particles' });
+    params.define({ id: 'particles.whiteSpeedMin', type: 'float', min: 0, max: 20, default: 2, label: 'Blanco desde', group: 'particles' });
+    params.define({ id: 'particles.whiteSpeedMax', type: 'float', min: 0, max: 40, default: 7, label: 'Blanco hasta', group: 'particles' });
     params.define({ id: 'particles.size', type: 'float', min: 0.5, max: 6, default: 2, label: 'Tamaño', group: 'particles' });
     params.define({ id: 'particles.length', type: 'float', min: 0.02, max: 4, default: 1.0, label: 'Largo', group: 'particles' });
     params.define({ id: 'particles.speed', type: 'float', min: 0, max: 2, default: 0.8, label: 'Velocidad sim', group: 'particles' });
@@ -107,6 +107,7 @@ export class MlsMpmSimulator {
     u.wallStiffness = uniform(0.3);
     u.wallMaxPush = uniform(1.0);
     u.hardClamp = uniform(0, 'uint');
+    u.wallBounce = uniform(0.2);
     u.resetSeed = uniform(0, 'uint');
 
     const encode = (f32) => int(f32.mul(FIXED_POINT));
@@ -312,6 +313,17 @@ export class MlsMpmSimulator {
         const pen = max(vec3(0), u.boxHalf.negate().sub(xN)).sub(max(vec3(0), xN.sub(u.boxHalf))).toConst('pen');
         lv.addAssign(clamp(pen.mul(u.wallStiffness), vec3(u.wallMaxPush).negate(), vec3(u.wallMaxPush)));
 
+        // El resorte de arriba es preventivo pero no garantiza nada: con la caja moviéndose o
+        // girando, los palitos igual se pasaban del límite. Este clamp final los deja SIEMPRE
+        // adentro y mata la velocidad que apunta hacia afuera (pared sólida, no elástica).
+        const clamped = clamp(local, u.boxHalf.negate(), u.boxHalf).toConst('clamped');
+        lv.assign(vec3(
+          select(clamped.x.notEqual(local.x), lv.x.mul(u.wallBounce).negate(), lv.x),
+          select(clamped.y.notEqual(local.y), lv.y.mul(u.wallBounce).negate(), lv.y),
+          select(clamped.z.notEqual(local.z), lv.z.mul(u.wallBounce).negate(), lv.z),
+        ));
+        local.assign(clamped);
+
         pos.assign(u.boxCenter.add(vec3(c.mul(local.x).add(s.mul(local.z)), local.y, s.negate().mul(local.x).add(c.mul(local.z)))));
         vel.assign(vec3(c.mul(lv.x).add(s.mul(lv.z)), lv.y, s.negate().mul(lv.x).add(c.mul(lv.z))));
       });
@@ -430,6 +442,7 @@ export class MlsMpmSimulator {
     u.wallStiffness.value = p.get('box.wallStiffness');
     u.wallMaxPush.value = p.get('box.wallMaxPush');
     u.hardClamp.value = p.get('box.hardClamp') ? 1 : 0;
+    u.wallBounce.value = p.get('box.wallBounce');
 
     this.forces.update(dt);
     u.dt.value = Math.min(dt, 1 / 60) * 6 * p.get('particles.speed');

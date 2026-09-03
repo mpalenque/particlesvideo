@@ -27,13 +27,14 @@ export class Floor {
   static defineParams(params) {
     params.define({ id: 'floor.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Piso', group: 'floor' });
     params.define({ id: 'floor.brightness', type: 'float', min: 0, max: 1, default: 1, label: 'Brillo', group: 'floor' });
-    params.define({ id: 'floor.laneSpacing', type: 'float', min: 0.1, max: 3, default: 0.5, label: 'Separación carriles (m)', group: 'floor' });
-    params.define({ id: 'floor.dashLength', type: 'float', min: 0.05, max: 3, default: 0.4, label: 'Largo dash (m)', group: 'floor' });
-    params.define({ id: 'floor.dashPeriod', type: 'float', min: 0.1, max: 6, default: 1.0, label: 'Período dash (m)', group: 'floor' });
-    params.define({ id: 'floor.dashWidth', type: 'float', min: 0.01, max: 0.5, default: 0.08, label: 'Ancho dash (m)', group: 'floor' });
+    params.define({ id: 'floor.laneSpacing', type: 'float', min: 0.1, max: 3, default: 0.7, label: 'Separación carriles (m)', group: 'floor' });
+    params.define({ id: 'floor.dashLength', type: 'float', min: 0.05, max: 3, default: 0.55, label: 'Largo dash (m)', group: 'floor' });
+    params.define({ id: 'floor.dashPeriod', type: 'float', min: 0.1, max: 6, default: 1.1, label: 'Período dash (m)', group: 'floor' });
+    params.define({ id: 'floor.dashWidth', type: 'float', min: 0.01, max: 0.5, default: 0.15, label: 'Ancho dash (m)', group: 'floor' });
+    params.define({ id: 'floor.contrast', type: 'float', min: 0.2, max: 1, default: 0.45, label: 'Contraste lejano', group: 'floor' });
     params.define({ id: 'floor.scrollSpeed', type: 'float', min: -5, max: 5, default: 0.6, label: 'Avance (m/s)', group: 'floor' });
     params.define({ id: 'floor.revealDuration', type: 'float', min: 0.1, max: 20, default: 4, label: 'Duración aparición (s)', group: 'floor' });
-    params.define({ id: 'floor.fadeFar', type: 'float', min: 5, max: 60, default: 30, label: 'Fade lejano (m)', group: 'floor' });
+    params.define({ id: 'floor.fadeFar', type: 'float', min: 5, max: 60, default: 45, label: 'Fade lejano (m)', group: 'floor' });
     params.define({ id: 'floor.revealDist', type: 'float', min: 0, max: 60, default: 0, label: 'Alcance actual (m)', group: 'floor', sceneReset: false });
     params.defineAction({ id: 'floor.reveal', label: 'Extender piso', group: 'floor' });
     params.defineAction({ id: 'floor.hide', label: 'Retraer piso', group: 'floor' });
@@ -43,7 +44,7 @@ export class Floor {
     this.params = ctx.params;
     this.u = {
       laneSpacing: uniform(0.5), dashLength: uniform(0.4), dashPeriod: uniform(1.0), dashWidth: uniform(0.08),
-      scroll: uniform(0), revealDist: uniform(0), fadeFar: uniform(30), opacity: uniform(0),
+      scroll: uniform(0), revealDist: uniform(0), fadeFar: uniform(45), opacity: uniform(0), contrast: uniform(0.45),
     };
     this.scroll = 0;
   }
@@ -67,9 +68,13 @@ export class Floor {
 
       const depth = p.z.negate();
       const reveal = float(1).sub(smoothstep(u.revealDist.sub(0.5), u.revealDist, depth));  // crece desde la pantalla al fondo
-      const farFade = float(1).sub(smoothstep(u.fadeFar.mul(0.6), u.fadeFar, depth));       // evita moiré en el horizonte
+      const farFade = float(1).sub(smoothstep(u.fadeFar.mul(0.85), u.fadeFar, depth));      // solo apaga contra el horizonte
 
-      return onLane.mul(onDash).mul(reveal).mul(farFade).mul(u.opacity);
+      // El promedio de área es correcto pero a la distancia deja un gris muy oscuro (el
+      // producto de los dos ciclos de trabajo). El gamma levanta ese gris sin volver al
+      // aliasing: con contrast = 1 es el promedio físico, más abajo realza el patrón lejano.
+      const cover = onLane.mul(onDash);
+      return cover.pow(u.contrast).mul(reveal).mul(farFade).mul(u.opacity);
     })();
 
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), material);
@@ -98,6 +103,7 @@ export class Floor {
     this.u.dashWidth.value = this.params.get('floor.dashWidth');
     this.u.revealDist.value = this.params.get('floor.revealDist');
     this.u.fadeFar.value = this.params.get('floor.fadeFar');
+    this.u.contrast.value = this.params.get('floor.contrast');
   }
 
   dispose() {

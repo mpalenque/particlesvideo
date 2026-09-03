@@ -1,7 +1,8 @@
 // Ids = número de imagen del storyboard. 1b/2b/6b/6c no son escenas: son acciones
 // dentro de su escena (warning.bgOff, line.flip, sweep.white, sweep.solid).
 // `mainAction` es lo que dispara la barra espaciadora.
-const GRID_FINE = { 'grid.cellW': 84, 'grid.cellH': 63 };   // medido del storyboard 4.png
+// Celdas cuadradas (Manuel las pidió cuadradas; el storyboard las tenía rectangulares).
+const GRID_FINE = { 'grid.cellW': 84, 'grid.cellH': 84 };
 
 export const SCENES = [
   {
@@ -94,7 +95,7 @@ export const SCENES = [
       'layer3d.opacity': 1, 'floor.opacity': 1,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     actions: [['floor.reveal']],
     mainAction: 'particles.resetInBox',
@@ -115,7 +116,7 @@ export const SCENES = [
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     mainAction: 'particles.resetInBox',
   },
@@ -145,7 +146,7 @@ export const SCENES = [
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'left',
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     mainAction: 'particles.resetInBox',
   },
@@ -156,7 +157,7 @@ export const SCENES = [
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     mainAction: ['ray.spawn', 'random'],
   },
@@ -167,7 +168,7 @@ export const SCENES = [
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'left',
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     mainAction: ['ray.spawn', 'random'],
   },
@@ -178,7 +179,7 @@ export const SCENES = [
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'right',
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
-      'particles.whiteSpeedMin': 0.8,
+      'particles.whiteSpeedMin': 2.5,
     },
     mainAction: ['ray.spawn', 'random'],
   },
@@ -212,7 +213,7 @@ export const SCENES = [
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
-      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
+      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 1.5,
       'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
     },
     mainAction: 'particles.kick',
@@ -225,7 +226,7 @@ export const SCENES = [
       'box.flicker': true, 'box.flickerRate': 8,
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
-      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
+      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 1.5,
       'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
     },
     mainAction: 'particles.kick',
