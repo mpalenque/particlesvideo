@@ -22,13 +22,16 @@ export async function createRenderer() {
   const stageEl = document.getElementById('stage');
   stageEl.appendChild(renderer.domElement);
 
-  const view = { mode: 'fit' };
+  // Nativo SIEMPRE: 2688 × 1008 reales, pixel a pixel. Cambiar el tamaño de la ventana
+  // no reescala el contenido (solo recentra lo que entra) — así lo que se ve en desarrollo
+  // es exactamente lo que va a salir por la LED, nunca una versión reducida por el navegador.
+  const view = { mode: 'native' };
   const apply = () => fitStage(stageEl, renderer.domElement, view.mode);
   apply();
   window.addEventListener('resize', apply);
 
-  // Vista 1:1 para juzgar nitidez: sin ella, lo que se ve en una ventana chica es el canvas
-  // reducido por el navegador, no lo que va a salir por la LED.
+  // Se deja el modo 'fit' accesible por si hace falta ver el cuadro completo en una
+  // ventana chica durante el desarrollo, pero el default y el del show es 'native'.
   view.toggleNative = () => {
     view.mode = view.mode === 'fit' ? 'native' : 'fit';
     apply();

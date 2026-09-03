@@ -54,11 +54,8 @@ await sleep(7000);
 
 // [nombre, expresión previa, espera en ms]
 const SHOTS = [
-  ['1-a', "vis.scenes.goto('1',{transition:0})", 300],
-  ['1-b', '', 1200],
-  ['1-c', '', 1200],
-  ['23-a', "vis.scenes.goto('23',{transition:0});vis.params.trigger('particles.resetInBox')", 4000],
-  ['23-b', '', 500],
+  ['1', "vis.scenes.goto('1',{transition:0})", 1500],
+  ['1b', "vis.params.trigger('warning.bgOff')", 2500],
 ];
 
 for (const [name, expr, wait] of SHOTS) {

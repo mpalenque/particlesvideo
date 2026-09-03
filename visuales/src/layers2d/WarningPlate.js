@@ -125,21 +125,34 @@ function drawBackground() {
   const c = newCanvas();
   const g = c.getContext('2d');
   const { width: W, height: H } = c;
-  const { stripe, stripePeriod } = LAYOUT.chevron;
+  const { ampP2P, stripe, stripePeriod } = LAYOUT.chevron;
+  const half = LAYOUT.period / 2;   // distancia entre vértices del zigzag (dónde cambia de pendiente)
 
   g.fillStyle = LAYOUT.black;
   g.fillRect(0, 0, W, H);
 
-  // Franjas ámbar en zigzag: por columna, se pinta donde (y - offset) cae en la mitad ámbar.
-  g.fillStyle = LAYOUT.amber;
-  for (let x = 0; x < W; x++) {
-    const off = chevronOffset(x);
-    const start = Math.floor((-off - H) / stripePeriod) * stripePeriod + off;
-    for (let y = start; y < H + stripePeriod; y += stripePeriod) {
-      const top = Math.round(y);
-      if (top + stripe < 0 || top > H) continue;
-      g.fillRect(x, top, 1, stripe);
-    }
+  // Antes esto se pintaba columna por columna con fillRect de 1 px: sin antialiasing en el
+  // borde diagonal, quedaba en escalones. Ahora cada franja es un TRAZO vectorial (polilínea
+  // por los vértices exactos del zigzag) — Canvas2D antialíasa los bordes de cualquier trazo
+  // o relleno por defecto, así que la diagonal sale lisa.
+  //
+  // El grosor pedido (`stripe`) es VERTICAL, pero `lineWidth` mide perpendicular al trazo;
+  // en una pendiente, perpendicular = vertical × cos(ángulo). Se compensa para que el ancho
+  // visual de la franja sea el mismo que antes.
+  const cosAngle = half / Math.sqrt(half * half + ampP2P * ampP2P);
+  g.strokeStyle = LAYOUT.amber;
+  g.lineWidth = stripe * cosAngle;
+  g.lineJoin = 'miter';
+  g.lineCap = 'butt';
+
+  const margin = ampP2P / 2 + stripe;
+  const kMin = Math.floor(-margin / stripePeriod);
+  const kMax = Math.ceil((H + margin) / stripePeriod);
+  for (let k = kMin; k <= kMax; k++) {
+    const row = k * stripePeriod;
+    g.beginPath();
+    for (let x = -half; x <= W + half; x += half) g.lineTo(x, row + chevronOffset(x));
+    g.stroke();
   }
 
   // Cajas "LUCES PARPADEANTES" (negras con texto ámbar) en las dos filas.

@@ -253,3 +253,22 @@ Costo: 184 → 165 fps (6 ms/frame) con partículas + piso, incluyendo GTAO y lu
 - **Escena 23** ("A punto de explotar"): torbellino mucho más fuerte (swirl y pull 4, radio 1.6),
   `particles.speed` 1.6, titileo de partículas y de la caja a 14 Hz, emisión propia al 0.5,
   y **sin piso** (`floor.opacity` 0).
+
+## Resolución fija (no escala con la ventana)
+
+Manuel pidió explícitamente que el contenido no se reescale al cambiar el tamaño de la ventana.
+`view.mode` default pasó de `'fit'` a `'native'`: el canvas siempre mide 2688 × 1008 en CSS
+(pixel a pixel), y al redimensionar la ventana solo se recentra, nunca se escala. `P` sigue
+disponible para pasar a `'fit'` si hace falta ver el cuadro completo en una ventana chica durante
+el desarrollo, pero ya no es el default — ni en desarrollo ni en el show.
+
+## Antialiasing de las diagonales de la escena 1
+
+Las franjas ámbar del fondo se pintaban columna por columna con `fillRect` de 1 px: sin
+antialiasing en el borde diagonal, quedaba en escalones (visible en zoom). Reemplazado por
+**trazos vectoriales**: cada franja es una polilínea por los vértices exactos del zigzag,
+y Canvas2D antialíasa los bordes de cualquier trazo por defecto.
+
+El grosor pedido (`stripe`) es vertical, pero `lineWidth` mide perpendicular al trazo; en una
+pendiente perpendicular = vertical × cos(ángulo), así que se compensa (`cosAngle` calculado desde
+la geometría del zigzag) para que el ancho visual de la franja sea el mismo que antes.
