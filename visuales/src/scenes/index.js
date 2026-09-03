@@ -100,13 +100,97 @@ export const SCENES = [
     mainAction: 'particles.resetInBox',
   },
   {
+    id: '12', name: 'Flujo azul que sube', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 0, 'box.enabled': true, 'box.preset': 'center',
+      'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.3,
+      'particles.flowY': 1.2, 'particles.wrapMode': 'vertical',
+    },
+    mainAction: 'particles.kick',
+  },
+  {
     id: '13', name: 'Caja + rojos (turbulencia)', transition: 1.5,
     params: {
-      'layer3d.opacity': 1, 'floor.opacity': 1,
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
       'particles.whiteSpeedMin': 0.8,
     },
     mainAction: 'particles.resetInBox',
+  },
+  {
+    id: '14', name: 'Bloque rojo a la izquierda', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 0, 'box.enabled': true, 'box.preset': 'center', 'box.wallStiffness': 0.5,
+      'redBlock.opacity': 1, 'redBlock.side': 'left', 'redBlock.attract': 6,
+      'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.4,
+    },
+    mainAction: 'particles.kick',
+  },
+  {
+    id: '15', name: 'Bloque rojo a la derecha', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 0, 'box.enabled': true, 'box.preset': 'center', 'box.wallStiffness': 0.5,
+      'redBlock.opacity': 1, 'redBlock.side': 'right', 'redBlock.attract': 6,
+      'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.4,
+    },
+    mainAction: 'particles.kick',
+  },
+  {
+    id: '16', name: 'Caja a la izquierda', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'left',
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    mainAction: 'particles.resetInBox',
+  },
+  {
+    id: '20', name: 'Partículas libres', transition: 2.0,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 0, 'box.enabled': false,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000',
+      'particles.turbulence': 0.5, 'particles.drag': 0.02,
+    },
+    mainAction: 'particles.kick',
+  },
+  {
+    id: '21', name: 'Torbellino', transition: 2.0,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 0, 'box.enabled': false,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000',
+      'particles.turbulence': 0.5, 'particles.drag': 0.02,
+      'vortex.swirl': 1.2, 'vortex.pull': 1.0, 'vortex.radius': 3.0,
+    },
+    mainAction: 'particles.kick',
+  },
+  {
+    id: '22', name: 'Torbellino en la caja', transition: 2.0,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000',
+      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
+      'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
+    },
+    mainAction: 'particles.kick',
+  },
+  {
+    id: '23', name: 'Torbellino + caja titilando', transition: 1.0,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'box.flicker': true, 'box.flickerRate': 8,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000',
+      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
+      'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
+    },
+    mainAction: 'particles.kick',
   },
 ];

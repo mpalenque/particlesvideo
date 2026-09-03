@@ -54,11 +54,11 @@ await sleep(7000);
 
 // [nombre, expresión previa, espera en ms]
 const SHOTS = [
-  ['10', "vis.scenes.goto('10',{transition:0})", 5000],
-  ['11', "vis.scenes.goto('11',{transition:0})", 4000],
-  ['13', "vis.scenes.goto('13',{transition:0})", 3000],
-  ['13-izq', "vis.params.set('box.preset','left')", 3000],
-  ['13-girada', "vis.params.set('box.preset','center');vis.params.set('box.yaw',10)", 3000],
+  ['13-reset', "vis.scenes.goto('13',{transition:0});vis.params.trigger('particles.resetInBox')", 3500],
+  ['13-girando', "vis.params.set('box.yawSpeed',70)", 2500],
+  ['13-girando2', '', 2000],
+  ['21-vortice', "vis.params.set('box.yawSpeed',0);vis.scenes.goto('21',{transition:0})", 8000],
+  ['12-flujo', "vis.scenes.goto('12',{transition:0})", 7000],
 ];
 
 for (const [name, expr, wait] of SHOTS) {

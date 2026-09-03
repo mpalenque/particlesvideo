@@ -1,10 +1,11 @@
 import * as THREE from 'three/webgpu';
 import {
   array, Fn, If, instanceIndex, instancedArray, Return, uniform, int, float, Loop, vec3, vec4,
-  atomicAdd, uint, max, pow, mat3, clamp, time, mix, ivec3, hash, cos, sin,
+  atomicAdd, uint, max, pow, mat3, clamp, time, mix, ivec3, hash, cos, sin, select,
 } from 'three/tsl';
 import { triNoise3Dvec } from './noise.js';
 import { StructuredArray } from './StructuredArray.js';
+import { Forces } from './Forces.js';
 import { STAGE } from '../../config/stage.js';
 
 const FIXED_POINT = 1e7;
@@ -29,6 +30,7 @@ export class MlsMpmSimulator {
     this.uniforms = {};
     this.kernels = {};
     this.gridSize = new THREE.Vector3();
+    this.forces = new Forces(ctx.params);
     this._boxCenter = new THREE.Vector3();
     this._boxHalf = new THREE.Vector3();
   }
@@ -51,6 +53,7 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.gravityY', type: 'float', min: -1, max: 1, default: 0, label: 'Gravedad Y', group: 'particles' });
     params.define({ id: 'particles.bloom', type: 'float', min: 0, max: 1, default: 1, label: 'Bloom', group: 'particles' });
     params.defineAction({ id: 'particles.resetInBox', label: 'Reubicar en la caja', group: 'particles' });
+    Forces.defineParams(params);
   }
 
   async init() {
@@ -257,6 +260,8 @@ export class MlsMpmSimulator {
       const noise = triNoise3Dvec(pos.mul(u.noiseScale), time, u.noiseSpeed).sub(0.285).normalize().mul(0.28).toVar();
       vel.subAssign(noise.mul(u.noise).mul(u.dt));
 
+      this.forces.apply(vel, pos, u.dt);
+
       const cellIndex = ivec3(pos).sub(1).toConst('cellIndex');
       const weights = quadraticWeights(pos.fract().sub(0.5).toConst('cellDiff'));
 
@@ -311,6 +316,25 @@ export class MlsMpmSimulator {
         vel.assign(vec3(c.mul(lv.x).add(s.mul(lv.z)), lv.y, s.negate().mul(lv.x).add(c.mul(lv.z))));
       });
 
+      // Emisión continua (escena 12): al salir por arriba reaparece abajo con x/z al azar.
+      // Todo en GPU: sin loops de CPU ni subir 25 MB de buffers por frame.
+      const f = this.forces.u;
+      If(f.wrapMode.equal(uint(1)), () => {
+        const top = select(u.boxEnabled.equal(uint(1)), u.boxCenter.y.add(u.boxHalf.y), f.wrapTop);
+        const bottom = select(u.boxEnabled.equal(uint(1)), u.boxCenter.y.sub(u.boxHalf.y), float(2));
+        If(pos.y.greaterThan(top), () => {
+          const seed = instanceIndex.add(u.resetSeed);
+          const rx = hash(seed.mul(uint(2))).sub(0.5).mul(2);
+          const rz = hash(seed.mul(uint(2)).add(uint(1))).sub(0.5).mul(2);
+          const halfX = select(u.boxEnabled.equal(uint(1)), u.boxHalf.x, float(20));
+          const halfZ = select(u.boxEnabled.equal(uint(1)), u.boxHalf.z, float(20));
+          pos.assign(vec3(u.boxCenter.x.add(rx.mul(halfX)), bottom.add(0.5), u.boxCenter.z.add(rz.mul(halfZ))));
+          pos.assign(clamp(pos, vec3(2), vec3(u.gridSize).sub(2)));
+          vel.assign(f.flow);
+          this.particleBuffer.element(instanceIndex).get('C').assign(mat3(0));
+        });
+      });
+
       this.particleBuffer.element(instanceIndex).get('position').assign(pos);
       this.particleBuffer.element(instanceIndex).get('velocity').assign(vel);
       const direction = this.particleBuffer.element(instanceIndex).get('direction');
@@ -343,6 +367,7 @@ export class MlsMpmSimulator {
     })().compute(maxParticles);
 
     this.params.onAction('particles.resetInBox', () => this.resetInBox());
+    this.params.onAction('particles.kick', () => this.forces.triggerKick());
   }
 
   // Semilla inicial en CPU (una sola vez, antes del primer frame).
@@ -406,6 +431,7 @@ export class MlsMpmSimulator {
     u.wallMaxPush.value = p.get('box.wallMaxPush');
     u.hardClamp.value = p.get('box.hardClamp') ? 1 : 0;
 
+    this.forces.update(dt);
     u.dt.value = Math.min(dt, 1 / 60) * 6 * p.get('particles.speed');
 
     if (this._pendingReset) {

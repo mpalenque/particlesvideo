@@ -111,3 +111,17 @@ Otros desvíos:
 Sobra margen para 60 fps en las dos: el preset "ultra" es viable para el show.
 Las consultas de timestamp de la GPU devuelven 0 en Chrome headless (la feature no está
 habilitada), así que la medición es de throughput real con vsync desactivado.
+
+## Fase 6
+
+- **`floor.revealDist` es estado (`sceneReset: false`)**, así que saltar directo a una escena 12+
+  dejaba el piso invisible aunque `floor.opacity` fuera 1. Las escenas que quieren el piso ya
+  extendido lo listan explícitamente (`'floor.revealDist': 60`); solo la 7 y la 11 animan el reveal.
+- **Atractores y repulsores usan división protegida** (`d / max(len(d), 0.001)`) en vez de
+  `normalize()`: un slot vacío tiene d = 0 y `normalize` daría NaN, que se propaga a toda la
+  velocidad. Se recorren siempre los 4 / 8 slots; los vacíos tienen fuerza 0 y no aportan.
+- **Escena 21**: con los valores del plan (swirl 1.2 / pull 0.6) la fuerza centrífuga dispersa las
+  partículas contra las paredes del dominio en vez de juntarlas. Subido a pull 1.0 y radio 3.0.
+  Es puro gusto y los dos son params mapeables, así que Manuel lo termina de afinar a ojo.
+- Verificado: el yaw continuo envuelve bien en ±180 y las partículas siguen a la caja al girar y al
+  trasladarse; el titileo alterna a la frecuencia y duty pedidos.

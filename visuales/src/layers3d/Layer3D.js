@@ -3,11 +3,12 @@ import { STAGE } from '../config/stage.js';
 import { OffAxisCamera } from '../render/OffAxisCamera.js';
 import { Floor } from './Floor.js';
 import { BoxWire } from './BoxWire.js';
+import { RedBlock } from './RedBlock.js';
 import { MlsMpmSimulator } from './particles/MlsMpmSimulator.js';
 import { StickRenderer } from './particles/StickRenderer.js';
 
 export class Layer3D {
-  static ELEMENTS = [Floor, BoxWire];
+  static ELEMENTS = [Floor, BoxWire, RedBlock];
 
   static defineParams(params) {
     params.define({ id: 'layer3d.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Capa 3D', group: 'layer3d' });
@@ -32,14 +33,17 @@ export class Layer3D {
   }
 
   async init() {
+    // El simulador va primero: los elementos publican atractores y repulsores en ctx.forces.
+    this.sim = new MlsMpmSimulator(this.ctx);
+    this.ctx.forces = this.sim.forces;
+    await this.sim.init();
+
     for (const El of Layer3D.ELEMENTS) {
       const el = new El(this.ctx);
       await el.init(this.scene);
       this.elements.push(el);
     }
 
-    this.sim = new MlsMpmSimulator(this.ctx);
-    await this.sim.init();
     this.sticks = new StickRenderer(this.ctx, this.sim);
     await this.sticks.init(this.scene);
   }
