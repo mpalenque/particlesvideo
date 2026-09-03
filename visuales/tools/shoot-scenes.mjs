@@ -54,11 +54,11 @@ await sleep(7000);
 
 // [nombre, expresión previa, espera en ms]
 const SHOTS = [
-  ['13-reset', "vis.scenes.goto('13',{transition:0});vis.params.trigger('particles.resetInBox')", 3500],
-  ['13-girando', "vis.params.set('box.yawSpeed',70)", 2500],
-  ['13-girando2', '', 2000],
-  ['21-vortice', "vis.params.set('box.yawSpeed',0);vis.scenes.goto('21',{transition:0})", 8000],
-  ['12-flujo', "vis.scenes.goto('12',{transition:0})", 7000],
+  ['17-cayendo', "vis.scenes.goto('17',{transition:0});vis.params.trigger('particles.resetInBox');setTimeout(()=>{for(let i=0;i<6;i++) setTimeout(()=>vis.params.trigger('ray.spawn','random'), i*90);}, 2500)", 3000],
+  ['17-impacto', '', 900],
+  ['17-debris', '', 900],
+  ['18', "vis.scenes.goto('18',{transition:0});for(let i=0;i<8;i++) setTimeout(()=>vis.params.trigger('ray.spawn','random'), i*70)", 2600],
+  ['22-rayos', "vis.scenes.goto('22',{transition:0});for(let i=0;i<8;i++) setTimeout(()=>vis.params.trigger('ray.spawn','random'), i*120)", 5000],
 ];
 
 for (const [name, expr, wait] of SHOTS) {

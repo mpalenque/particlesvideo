@@ -125,3 +125,14 @@ habilitada), así que la medición es de throughput real con vsync desactivado.
   Es puro gusto y los dos son params mapeables, así que Manuel lo termina de afinar a ojo.
 - Verificado: el yaw continuo envuelve bien en ±180 y las partículas siguen a la caja al girar y al
   trasladarse; el titileo alterna a la frecuencia y duty pedidos.
+
+## Fase 7
+
+- **Un slot de repulsor por rayo, desde que cae hasta que se apaga el impacto.** El plan pedía
+  8 rayos simultáneos y `MAX_REPULSORS` = 8; en vez de sumar slots aparte para las ondas expansivas,
+  cada rayo se queda con el suyo durante toda su vida (caída → onda de 0.3 s → libera). Así entra
+  todo en los 8 slots sin cambiar el límite.
+- `Debris` preasigna todo (4000 instancias, `Float32Array` por atributo, matrices y quaternions
+  reutilizados): no se crea ni un objeto por frame en el loop.
+- Verificado: 8 barras cayendo a la vez a 6 m/s con sus 8 repulsores publicados, 480 esquirlas
+  al impactar que se apagan solas, y 245 fps sin vsync con partículas + rayos + bloom.

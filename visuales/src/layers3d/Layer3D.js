@@ -4,11 +4,13 @@ import { OffAxisCamera } from '../render/OffAxisCamera.js';
 import { Floor } from './Floor.js';
 import { BoxWire } from './BoxWire.js';
 import { RedBlock } from './RedBlock.js';
+import { Rays } from './Rays.js';
+import { Debris } from './Debris.js';
 import { MlsMpmSimulator } from './particles/MlsMpmSimulator.js';
 import { StickRenderer } from './particles/StickRenderer.js';
 
 export class Layer3D {
-  static ELEMENTS = [Floor, BoxWire, RedBlock];
+  static ELEMENTS = [Floor, BoxWire, RedBlock, Debris, Rays];
 
   static defineParams(params) {
     params.define({ id: 'layer3d.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Capa 3D', group: 'layer3d' });

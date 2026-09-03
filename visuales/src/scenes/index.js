@@ -150,10 +150,44 @@ export const SCENES = [
     mainAction: 'particles.resetInBox',
   },
   {
+    id: '17', name: 'Caja + rayos', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    mainAction: ['ray.spawn', 'random'],
+  },
+  {
+    id: '18', name: 'Caja a la izquierda + rayos', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'left',
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    mainAction: ['ray.spawn', 'random'],
+  },
+  {
+    id: '19', name: 'Caja a la derecha + rayos', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'right',
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    mainAction: ['ray.spawn', 'random'],
+  },
+  {
     id: '20', name: 'Partículas libres', transition: 2.0,
     params: {
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 0, 'box.enabled': false,
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
       'particles.turbulence': 0.5, 'particles.drag': 0.02,
     },
@@ -164,6 +198,7 @@ export const SCENES = [
     params: {
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 0, 'box.enabled': false,
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
       'particles.turbulence': 0.5, 'particles.drag': 0.02,
       'vortex.swirl': 1.2, 'vortex.pull': 1.0, 'vortex.radius': 3.0,
@@ -175,6 +210,7 @@ export const SCENES = [
     params: {
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
       'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
       'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
@@ -187,6 +223,7 @@ export const SCENES = [
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
       'box.flicker': true, 'box.flickerRate': 8,
+      'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
       'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 0.4,
       'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
