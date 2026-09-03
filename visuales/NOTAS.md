@@ -39,6 +39,28 @@ Qué se hizo distinto al plan y por qué, y problemas conocidos. Corto.
 - **Verificado con OSC real**: `/p/`, `/pn/` y `/scene` por UDP; cambiar el puerto desde el editor
   hace que el bridge reabra el socket (probado 9000 → 9001 con el mensaje llegando al param).
 
+## Fase 3
+
+- **Texturas 2D necesitan `flipY = false`.** Igual que el culling de la Fase 1, es consecuencia de que
+  la ortográfica invierte Y: con el `flipY` por defecto de three la textura sale espejada en vertical.
+  Verificado dibujando un rectángulo rojo en la esquina 0,0 del canvas.
+- **No se usa `screenCoordinate`.** Las grillas sacan el píxel de `uv() × tamaño del quad`: el quad
+  mapea 1:1 a píxeles, así que da coordenadas exactas sin depender de la orientación de la pantalla
+  ni de la convención de Y de WebGPU. Verificado contando píxeles: líneas de exactamente 1 px.
+- **Medidas de la placa sacadas del storyboard con canvas** (no a ojo): ámbar real `#F2A100`,
+  período horizontal 329.5 px, chevrones de 35 px con período vertical 70 y amplitud pico a pico 96,
+  banda de 48 px con líneas de 2, cajas de 225 × 24.
+  El storyboard mide 1976 × 464 (4.26:1), **no** tiene el aspecto de la LED (8:3), así que no hay una
+  escala única: el ritmo horizontal se escala por ancho (×1.360 → 6 columnas de 448 px, como el plan)
+  y los tamaños verticales por alto (×2.172), para que la banda y el texto conserven su peso visual.
+  Todo está en el objeto `LAYOUT` arriba de `WarningPlate.js` para ajustarlo a ojo en un solo lugar.
+- **Celdas de grilla 84 × 63 px** (medidas del storyboard 4.png), puestas en las escenas 4/5/6, no como
+  default del param: el registro mantiene 96 × 96 como dice la tabla del plan.
+- `tools/shoot-scenes.mjs` (agregado): saca una captura por escena/disparador para comparar con el
+  storyboard. Fuerza el viewport a 2688 × 1008 con `Emulation.setDeviceMetricsOverride` y recorta al
+  canvas — **sin eso las capturas salen a escala CSS (~0.35×) y las líneas de 1 px desaparecen al
+  reescalar**, que al principio pareció un bug del shader y no lo era.
+
 ### Limitaciones conocidas (no son bugs)
 
 - **Chrome headless no da permiso de Web MIDI** (`NotAllowedError`), así que el MIDI real solo se puede

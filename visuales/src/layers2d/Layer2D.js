@@ -1,10 +1,14 @@
 import * as THREE from 'three/webgpu';
 import { STAGE } from '../config/stage.js';
-import { TestRect } from './TestRect.js';
+import { WarningPlate } from './WarningPlate.js';
+import { Frame } from './Frame.js';
+import { MovingLine } from './MovingLine.js';
+import { GridBlocks } from './GridBlocks.js';
+import { Sweeps } from './Sweeps.js';
 
 // Escena ortográfica en píxeles: origen arriba-izquierda, x a la derecha, y hacia abajo.
 export class Layer2D {
-  static ELEMENTS = [TestRect];
+  static ELEMENTS = [WarningPlate, GridBlocks, Sweeps, Frame, MovingLine];
 
   static defineParams(params) {
     for (const El of Layer2D.ELEMENTS) El.defineParams(params);
