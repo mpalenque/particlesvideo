@@ -24,6 +24,8 @@ export class WarningPlate {
     params.define({ id: 'warning.scroll', type: 'float', min: -200, max: 200, default: 0, label: 'Scroll texto (px/s)', group: 'warning' });
     params.define({ id: 'warning.pulseAttack', type: 'float', min: 0.1, max: 10, default: 1.0, label: 'Pulso ataque (s)', group: 'warning' });
     params.define({ id: 'warning.pulseRelease', type: 'float', min: 0.1, max: 10, default: 2.0, label: 'Pulso caída (s)', group: 'warning' });
+    params.define({ id: 'warning.bgPulse', type: 'float', min: 0, max: 1, default: 0, label: 'Latido del fondo', group: 'warning' });
+    params.define({ id: 'warning.bgPulseRate', type: 'float', min: 0.05, max: 6, default: 0.5, label: 'Latido (Hz)', group: 'warning' });
     params.defineAction({ id: 'warning.pulse', label: 'Pulso de fondo', group: 'warning' });
     params.defineAction({ id: 'warning.bgOff', label: 'Apagar fondo (1b)', group: 'warning' });
     params.defineAction({ id: 'warning.bgOn', label: 'Prender fondo', group: 'warning' });
@@ -75,7 +77,12 @@ export class WarningPlate {
   }
 
   update(dt) {
-    this.uBg.value = this.params.get('warning.bg');
+    // El latido sube y baja SOLO los chevrones del fondo. La banda y el texto van por otro
+    // quad, así que quedan siempre encendidos aunque el fondo respire.
+    const pulse = this.params.get('warning.bgPulse');
+    this.pulsePhase = (this.pulsePhase ?? 0) + dt * this.params.get('warning.bgPulseRate') * Math.PI * 2;
+    const latido = 1 - pulse * 0.5 * (1 - Math.cos(this.pulsePhase));
+    this.uBg.value = this.params.get('warning.bg') * latido;
     this.uBand.value = this.params.get('warning.band');
     this.scrollPx += this.params.get('warning.scroll') * dt;
     this.uScroll.value = (this.scrollPx / STAGE.width) % 1;

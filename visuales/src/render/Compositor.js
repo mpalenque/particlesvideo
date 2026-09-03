@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { pass, mrt, output, float, vec3, vec4, uniform, Fn, mix } from 'three/tsl';
+import { pass, mrt, output, float, vec3, vec4, uniform, Fn, mix, transformedNormalView } from 'three/tsl';
+import { ao } from 'three/examples/jsm/tsl/display/GTAONode.js';
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 
 // Un solo grafo de PostProcessing: pase 3D (+bloom por MRT) y pase 2D compuesto encima con alpha.
@@ -12,6 +13,10 @@ export class Compositor {
     params.define({ id: 'bloom.strength', type: 'float', min: 0, max: 2, default: 0.9, label: 'Bloom fuerza', group: 'bloom', sceneReset: false });
     params.define({ id: 'bloom.radius', type: 'float', min: 0, max: 1, default: 0.8, label: 'Bloom radio', group: 'bloom', sceneReset: false });
     params.define({ id: 'bloom.threshold', type: 'float', min: 0, max: 1, default: 0, label: 'Bloom umbral', group: 'bloom', sceneReset: false });
+    params.define({ id: 'ao.enabled', type: 'bool', default: true, label: 'Ambient occlusion', group: 'ao', sceneReset: false });
+    params.define({ id: 'ao.amount', type: 'float', min: 0, max: 1, default: 0.85, label: 'Intensidad AO', group: 'ao', sceneReset: false });
+    params.define({ id: 'ao.distance', type: 'float', min: 0.05, max: 2, default: 0.35, label: 'Radio AO (m)', group: 'ao', sceneReset: false });
+    params.define({ id: 'ao.thickness', type: 'float', min: 0.05, max: 4, default: 1.0, label: 'Grosor AO', group: 'ao', sceneReset: false });
   }
 
   constructor(ctx, layer2d, layer3d) {
@@ -23,10 +28,15 @@ export class Compositor {
 
   init() {
     const scene3DPass = pass(this.layer3d.scene, this.layer3d.camera);
-    scene3DPass.setMRT(mrt({ output, bloomIntensity: float(0) }));
+    // El MRT saca además la normal de vista, que es lo que necesita el GTAO junto con la
+    // profundidad para calcular la oclusión.
+    scene3DPass.setMRT(mrt({ output, normal: transformedNormalView, bloomIntensity: float(0) }));
     const color3D = scene3DPass.getTextureNode();
     const bloomMask = scene3DPass.getTextureNode('bloomIntensity');
     this.bloomPass = bloom(color3D.mul(bloomMask));
+
+    this.uAoAmount = uniform(0.85);
+    this.aoPass = ao(scene3DPass.getTextureNode('depth'), scene3DPass.getTextureNode('normal'), this.layer3d.camera);
 
     const scene2DPass = pass(this.layer2d.scene, this.layer2d.camera);
     const color2D = scene2DPass.getTextureNode();
@@ -38,7 +48,9 @@ export class Compositor {
     this.post = new THREE.PostProcessing(this.renderer);
     this.post.outputColorTransform = false;
     this.post.outputNode = Fn(() => {
-      const a = color3D.rgb.clamp(0, 1).toVar();
+      // AO multiplicando el color antes del bloom: oscurece los huecos entre palitos.
+      const oclusion = mix(float(1), this.aoPass.x, this.uAoAmount);
+      const a = color3D.rgb.mul(oclusion).clamp(0, 1).toVar();
       const b = this.bloomPass.rgb.clamp(0, 1).mul(this.uBloomOn).toVar();
       // screen-blend como en el repo original: (1-2b)·a² + 2·b·a
       const c3 = vec3(1).sub(b).sub(b).mul(a).mul(a).add(b.mul(a).mul(2)).clamp(0, 1);
@@ -54,6 +66,10 @@ export class Compositor {
     this.bloomPass.strength.value = this.params.get('bloom.strength');
     this.bloomPass.radius.value = this.params.get('bloom.radius');
     this.bloomPass.threshold.value = this.params.get('bloom.threshold');
+    this.uAoAmount.value = this.params.get('ao.enabled') ? this.params.get('ao.amount') : 0;
+    this.aoPass.distanceExponent.value = 1;
+    this.aoPass.radius.value = this.params.get('ao.distance');
+    this.aoPass.thickness.value = this.params.get('ao.thickness');
   }
 
   async render() {

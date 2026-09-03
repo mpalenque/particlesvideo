@@ -1,7 +1,8 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, vec3, uint, varying, instanceIndex, mix, normalize, cross, mat3,
-  normalLocal, transformNormalToView, mrt, uniform, smoothstep, float,
+  normalLocal, transformNormalToView, mrt, uniform, smoothstep, float, hash, clamp,
+  transformedNormalView, output,
 } from 'three/tsl';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STAGE } from '../../config/stage.js';
@@ -97,6 +98,8 @@ export class StickRenderer {
       scale: uniform(new THREE.Vector3(1, 1, 1)), opacity: uniform(0), bloom: uniform(1),
       baseColor: uniform(new THREE.Color('#ff0000')),
       whiteMin: uniform(0.6), whiteMax: uniform(3.0),
+      ageGrow: uniform(1.2), sizeJitter: uniform(0.45), flicker: uniform(0), flickerPhase: uniform(0),
+      roughness: uniform(0.55), metalness: uniform(0.0), emissive: uniform(0.15),
     };
     this._color = '';
     this._bloomOn = null;
@@ -104,14 +107,20 @@ export class StickRenderer {
 
   async init(scene) {
     const roundedBoxGeometry = createRoundedBox(0.7, 0.7, 3, 0.1);
-    this.geometry = new THREE.InstancedBufferGeometry().copy(BufferGeometryUtils.mergeVertices(roundedBoxGeometry));
+    const merged = BufferGeometryUtils.mergeVertices(roundedBoxGeometry);
+    // createRoundedBox reescribe posiciones e índices, así que las normales que traía la
+    // BoxGeometry quedan mal. Sin recalcularlas el material iluminado no tiene con qué trabajar.
+    merged.computeVertexNormals();
+    this.geometry = new THREE.InstancedBufferGeometry().copy(merged);
     this.geometry.instanceCount = 0;
 
     const u = this.u;
     const particle = this.sim.particleBuffer.element(instanceIndex);
 
-    this.material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-    const vNormal = varying(vec3(0), 'v_normalView');
+    // Escribe profundidad (los palitos se tapan entre sí de verdad y el GTAO tiene con qué
+    // trabajar), pero sigue siendo `transparent` para que `particles.opacity` pueda fundirlos
+    // en las transiciones de escena. Con alpha 1 se comporta igual que un opaco.
+    this.material = new THREE.MeshStandardNodeMaterial({ transparent: true, depthWrite: true });
 
     this.material.positionNode = Fn(() => {
       const particlePosition = particle.get('position');
@@ -119,21 +128,45 @@ export class StickRenderer {
       const particleDirection = particle.get('direction');
       const alive = float(particle.get('alive').equal(uint(1)));
       const mat = calcLookAtMatrix(particleDirection.xyz);
-      vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
+
+      // Tamaño: densidad (como el original) × edad × variación fija por partícula.
+      // Sin la variación por partícula todos los palitos miden exactamente lo mismo y se nota.
+      const age = particle.get('age');
+      const grow = clamp(age.div(u.ageGrow), 0, 1);
+      const jitter = float(1).sub(u.sizeJitter.mul(0.5)).add(hash(instanceIndex).mul(u.sizeJitter));
+      const size = particleDensity.mul(0.4).add(0.5).clamp(0, 1).mul(grow).mul(jitter);
+
       return mat
         .mul(attribute('position').xyz.mul(u.scale))
-        .mul(particleDensity.mul(0.4).add(0.5).clamp(0, 1))
+        .mul(size)
         .mul(alive)
         .add(particlePosition);
     })();
 
+    this.material.normalNode = Fn(() => {
+      const mat = calcLookAtMatrix(particle.get('direction').xyz);
+      return transformNormalToView(mat.mul(normalLocal));
+    })();
+
     // Color base de la escena, mezclado a blanco según la velocidad (pedido del storyboard).
+    // El titileo (escena 23) modula el brillo por partícula con fase propia: da la sensación
+    // de que la masa está por explotar en vez de parpadear toda junta.
     this.material.colorNode = Fn(() => {
       const speed = particle.get('velocity').xyz.length();
       const white = smoothstep(u.whiteMin, u.whiteMax, speed);
-      return mix(u.baseColor, vec3(1, 1, 1), white);
+      const base = mix(u.baseColor, vec3(1, 1, 1), white);
+      const fase = hash(instanceIndex.add(uint(977))).mul(6.2831);
+      const parpadeo = float(1).sub(u.flicker).add(u.flicker.mul(u.flickerPhase.add(fase).sin().mul(0.5).add(0.5)));
+      return base.mul(parpadeo);
     })();
     this.material.opacityNode = Fn(() => u.opacity.mul(float(particle.get('alive').equal(uint(1)))))();
+    this.material.roughnessNode = u.roughness;
+    this.material.metalnessNode = u.metalness;
+    this.material.emissiveNode = Fn(() => {
+      const speed = particle.get('velocity').xyz.length();
+      const white = smoothstep(u.whiteMin, u.whiteMax, speed);
+      return mix(u.baseColor, vec3(1, 1, 1), white).mul(u.emissive);
+    })();
 
     this.object = new THREE.Mesh(this.geometry, this.material);
     this.object.frustumCulled = false;
@@ -143,7 +176,7 @@ export class StickRenderer {
     scene.add(this.object);
   }
 
-  update() {
+  update(dt) {
     const p = this.params;
     const count = p.get('particles.count');
     const opacity = p.get('particles.opacity') * p.get('layer3d.opacity');
@@ -165,6 +198,14 @@ export class StickRenderer {
     );
     this.u.whiteMin.value = p.get('particles.whiteSpeedMin');
     this.u.whiteMax.value = p.get('particles.whiteSpeedMax');
+    this.u.ageGrow.value = Math.max(p.get('particles.ageGrow'), 0.001);
+    this.u.sizeJitter.value = p.get('particles.sizeJitter');
+    this.u.roughness.value = p.get('particles.roughness');
+    this.u.metalness.value = p.get('particles.metalness');
+    this.u.emissive.value = p.get('particles.emissive');
+    this.u.flicker.value = p.get('particles.flicker');
+    this.phase = (this.phase ?? 0) + dt * p.get('particles.flickerRate') * Math.PI * 2;
+    this.u.flickerPhase.value = this.phase;
 
     const color = p.get('particles.baseColor');
     if (color !== this._color) { this.u.baseColor.value.set(color); this._color = color; }

@@ -52,6 +52,13 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.viscosity', type: 'float', min: 0.01, max: 0.4, default: 0.1, label: 'Viscosidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.gravityY', type: 'float', min: -1, max: 1, default: 0, label: 'Gravedad Y', group: 'particles' });
     params.define({ id: 'particles.bloom', type: 'float', min: 0, max: 1, default: 1, label: 'Bloom', group: 'particles' });
+    params.define({ id: 'particles.ageGrow', type: 'float', min: 0.05, max: 6, default: 1.2, label: 'Crecer con la edad (s)', group: 'particles' });
+    params.define({ id: 'particles.sizeJitter', type: 'float', min: 0, max: 1, default: 0.45, label: 'Variación de tamaño', group: 'particles' });
+    params.define({ id: 'particles.roughness', type: 'float', min: 0, max: 1, default: 0.55, label: 'Rugosidad', group: 'particles', sceneReset: false });
+    params.define({ id: 'particles.metalness', type: 'float', min: 0, max: 1, default: 0, label: 'Metalicidad', group: 'particles', sceneReset: false });
+    params.define({ id: 'particles.emissive', type: 'float', min: 0, max: 2, default: 0.15, label: 'Emisión propia', group: 'particles' });
+    params.define({ id: 'particles.flicker', type: 'float', min: 0, max: 1, default: 0, label: 'Titileo', group: 'particles' });
+    params.define({ id: 'particles.flickerRate', type: 'float', min: 0.1, max: 40, default: 9, label: 'Titileo (Hz)', group: 'particles' });
     params.defineAction({ id: 'particles.resetInBox', label: 'Reubicar en la caja', group: 'particles' });
     Forces.defineParams(params);
   }
@@ -73,6 +80,7 @@ export class MlsMpmSimulator {
       mass: { type: 'float' },
       C: { type: 'mat3' },
       direction: { type: 'vec3' },
+      age: { type: 'float' },
       alive: { type: 'uint' },
     };
     this.particleBuffer = new StructuredArray(particleStruct, maxParticles, 'particleData');
@@ -98,6 +106,7 @@ export class MlsMpmSimulator {
     u.noiseSpeed = uniform(0.5);
     u.gridSize = uniform(this.gridSize, 'ivec3');
     u.dt = uniform(0.1);
+    u.frameTime = uniform(0);   // dt real en segundos, para la edad
     u.numParticles = uniform(0, 'uint');
 
     u.boxEnabled = uniform(0, 'uint');
@@ -344,6 +353,7 @@ export class MlsMpmSimulator {
           pos.assign(clamp(pos, vec3(2), vec3(u.gridSize).sub(2)));
           vel.assign(f.flow);
           this.particleBuffer.element(instanceIndex).get('C').assign(mat3(0));
+          this.particleBuffer.element(instanceIndex).get('age').assign(float(0));
         });
       });
 
@@ -351,6 +361,8 @@ export class MlsMpmSimulator {
       this.particleBuffer.element(instanceIndex).get('velocity').assign(vel);
       const direction = this.particleBuffer.element(instanceIndex).get('direction');
       direction.assign(mix(direction, vel, 0.1));
+      const age = this.particleBuffer.element(instanceIndex).get('age');
+      age.assign(age.add(u.frameTime));
     })().compute(1);
 
     // Reubica todas las partículas dentro de la caja actual, en GPU:
@@ -375,6 +387,8 @@ export class MlsMpmSimulator {
       el.get('density').assign(float(1));
       el.get('mass').assign(float(1).sub(hash(seed).mul(0.002)));
       el.get('direction').assign(vec3(0, 0, 1));
+      // Edades repartidas al azar: si nacieran todas en 0 crecerían todas juntas y se notaría.
+      el.get('age').assign(hash(seed.add(uint(31))).mul(4));
       el.get('alive').assign(uint(1));
     })().compute(maxParticles);
 
@@ -390,6 +404,7 @@ export class MlsMpmSimulator {
       this.particleBuffer.set(i, 'position', v);
       this.particleBuffer.set(i, 'mass', 1.0 - Math.random() * 0.002);
       this.particleBuffer.set(i, 'density', 1);
+      this.particleBuffer.set(i, 'age', Math.random() * 4);
       this.particleBuffer.set(i, 'alive', 1);
     }
   }
@@ -446,6 +461,7 @@ export class MlsMpmSimulator {
 
     this.forces.update(dt);
     u.dt.value = Math.min(dt, 1 / 60) * 6 * p.get('particles.speed');
+    u.frameTime.value = Math.min(dt, 1 / 30);
 
     if (this._pendingReset) {
       this._pendingReset = false;

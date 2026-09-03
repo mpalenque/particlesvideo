@@ -7,7 +7,11 @@ const GRID_FINE = { 'grid.cellW': 84, 'grid.cellH': 84 };
 export const SCENES = [
   {
     id: '1', name: 'Placa de advertencia', transition: 1.0,
-    params: { 'warning.band': 1, 'warning.bg': 1 },
+    params: {
+      'warning.band': 1, 'warning.bg': 1,
+      'warning.scroll': 90,          // el texto ADVERTENCIA corre continuo hacia la izquierda
+      'warning.bgPulse': 0.85, 'warning.bgPulseRate': 0.45,
+    },
     mainAction: 'warning.pulse',
   },
   {
@@ -219,15 +223,18 @@ export const SCENES = [
     mainAction: 'particles.kick',
   },
   {
-    id: '23', name: 'Torbellino + caja titilando', transition: 1.0,
+    id: '23', name: 'A punto de explotar', transition: 1.0,
     params: {
-      'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
+      'layer3d.opacity': 1, 'floor.opacity': 0,          // sin piso: acá no van los dashes
       'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
-      'box.flicker': true, 'box.flickerRate': 8,
+      'box.flicker': true, 'box.flickerRate': 14,
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000',
-      'particles.turbulence': 0.5, 'particles.drag': 0.02, 'particles.whiteSpeedMin': 1.5,
-      'vortex.swirl': 2.2, 'vortex.pull': 1.4, 'vortex.radius': 2.5,
+      'particles.turbulence': 1.1, 'particles.drag': 0.01, 'particles.whiteSpeedMin': 1.5,
+      'particles.speed': 1.6,                            // todo más rápido
+      'particles.flicker': 0.8, 'particles.flickerRate': 14,
+      'particles.emissive': 0.5,
+      'vortex.swirl': 4, 'vortex.pull': 4, 'vortex.radius': 1.6,   // energía mucho más fuerte
     },
     mainAction: 'particles.kick',
   },

@@ -214,3 +214,42 @@ Manuel reportó que las tiras del piso se veían pixeladas / "resampleadas". Era
   `floor.fadeFar` para que no se dibujen los que ya no se resuelven.
 
   Rendimiento: 444 fps solo el piso, 184 con las partículas encima (sin vsync).
+
+## Palitos iluminados con ambient occlusion
+
+**Punto de retorno: tag `palitos-basicos`.** Es el commit anterior a este cambio, con los palitos
+como `MeshBasicNodeMaterial` transparentes sin luces ni AO. Para volver:
+`git checkout palitos-basicos -- visuales/src/layers3d/particles/StickRenderer.js visuales/src/render/Compositor.js`
+(y sacar `Lights` del array `ELEMENTS` de `Layer3D`).
+
+- **Material**: pasó de `MeshBasicNodeMaterial` a `MeshStandardNodeMaterial`, con `depthWrite: true`
+  para que los palitos se tapen entre sí de verdad y el GTAO tenga profundidad con la que trabajar.
+  Sigue con `transparent: true` **a propósito**: con `transparent: false` el `opacityNode` se ignora
+  y `particles.opacity` dejaba de fundir las partículas en las transiciones de escena. Con alpha 1
+  se comporta igual que un opaco.
+- **`computeVertexNormals()` obligatorio**: `createRoundedBox` reescribe posiciones e índices, así
+  que las normales que traía la `BoxGeometry` quedaban mal y three avisaba
+  ("Vertex attribute normal not found"). Sin normales el material iluminado no tiene con qué trabajar.
+- **AO**: GTAO (`three/examples/jsm/tsl/display/GTAONode.js`) sobre el pase 3D. El MRT ahora saca
+  también `normal: transformedNormalView`, que junto con la profundidad es lo que necesita.
+  Params `ao.enabled`, `ao.amount`, `ao.distance`, `ao.thickness`.
+  Ojo: `ao.enabled: false` solo pone la mezcla en 0, el pase se sigue calculando — no ahorra tiempo.
+- **Luces** (`Lights.js`): ambiente + principal + relleno, todo parametrizado (posición, color e
+  intensidad) para poder animarlo por MIDI/OSC más adelante.
+- **Tamaño por partícula**: campo `age` nuevo en el struct, que avanza en segundos reales y se
+  resetea al reubicar y al reaparecer por wrap. El tamaño es densidad × `particles.ageGrow`
+  (crecen al nacer) × una variación fija por partícula (`particles.sizeJitter`, hash del índice) —
+  sin esa variación todos los palitos miden exactamente lo mismo y se nota.
+- **Titileo** (`particles.flicker`, `particles.flickerRate`): cada partícula tiene su propia fase,
+  así la masa "hierve" en vez de parpadear entera. Es lo que da el efecto de estar por explotar.
+
+Costo: 184 → 165 fps (6 ms/frame) con partículas + piso, incluyendo GTAO y luces.
+
+## Otros ajustes
+
+- **Escena 1**: el texto ADVERTENCIA hace scroll continuo hacia la izquierda (`warning.scroll` 90)
+  y el fondo late con `warning.bgPulse` / `warning.bgPulseRate`. El latido toca **solo** el quad de
+  los chevrones; la banda y el texto van en otro quad, así que nunca se apagan.
+- **Escena 23** ("A punto de explotar"): torbellino mucho más fuerte (swirl y pull 4, radio 1.6),
+  `particles.speed` 1.6, titileo de partículas y de la caja a 14 Hz, emisión propia al 0.5,
+  y **sin piso** (`floor.opacity` 0).
