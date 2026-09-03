@@ -1,0 +1,227 @@
+import { clamp } from '../core/Tween.js';
+
+// Tabla fuente → destino. Es lo único que traduce MIDI/OSC a escrituras en Params.
+export class Mapper {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.params = ctx.params;
+    this.mappings = [];
+    this.index = new Map();          // clave de fuente → filas (fan-out)
+    this.learnRow = null;
+    this.monitor = [];               // últimos 50 mensajes
+    this.currentScene = null;
+    this._listeners = { mappings: [], monitor: [] };
+  }
+
+  async init() {
+    const stored = localStorage.getItem('vis.mappings');
+    if (stored) {
+      try { this.setMappings(JSON.parse(stored).mappings ?? []); return; }
+      catch { console.error('[vis] mapeos guardados inválidos, uso el default'); }
+    }
+    await this.resetToDefault();
+  }
+
+  async resetToDefault() {
+    try {
+      const res = await fetch('./mappings.default.json');
+      const json = await res.json();
+      this.setMappings(json.mappings ?? []);
+    } catch (err) {
+      console.error('[vis] no se pudo cargar mappings.default.json', err);
+      this.setMappings([]);
+    }
+  }
+
+  setMappings(mappings) {
+    this.mappings = mappings;
+    this._reindex();
+    this._emit('mappings');
+  }
+
+  save() {
+    localStorage.setItem('vis.mappings', JSON.stringify({ version: 1, mappings: this.mappings }));
+  }
+
+  exportJson() {
+    return JSON.stringify({ version: 1, mappings: this.mappings }, null, 2);
+  }
+
+  onSceneChange(id) { this.currentScene = id; }
+
+  on(event, fn) { this._listeners[event]?.push(fn); }
+  _emit(event, payload) { for (const fn of this._listeners[event] ?? []) fn(payload ?? this.mappings); }
+
+  _reindex() {
+    this.index.clear();
+    for (const m of this.mappings) {
+      const key = sourceKey(m.source);
+      if (!key) continue;
+      if (!this.index.has(key)) this.index.set(key, []);
+      this.index.get(key).push(m);
+    }
+  }
+
+  learn(rowId) {
+    this.learnRow = rowId;
+  }
+
+  // Punto de entrada de todo lo que llega de MIDI y OSC.
+  dispatch(msg) {
+    if (this.learnRow != null && isLearnable(msg)) {
+      this._assignLearn(msg);
+      return;
+    }
+
+    const fired = [];
+
+    // Rutas OSC automáticas: funcionan sin mapear nada.
+    if (msg.kind === 'osc' && this._autoOsc(msg)) fired.push('(ruta OSC automática)');
+
+    const key = sourceKey(msg.kind === 'note' ? { kind: 'note', channel: msg.channel, note: msg.note }
+      : msg.kind === 'cc' ? { kind: 'cc', channel: msg.channel, cc: msg.cc }
+      : { kind: 'osc', address: msg.address });
+
+    for (const m of this.index.get(key) ?? []) {
+      if (!this._sceneAllows(m)) continue;
+      if (this._apply(m, msg)) fired.push(m.id);
+    }
+
+    this._record(msg, fired);
+  }
+
+  _sceneAllows(m) {
+    return !m.scenes || m.scenes.length === 0 || m.scenes.includes(this.currentScene);
+  }
+
+  _apply(m, msg) {
+    const p = this.params.def(m.target);
+    const isAction = this.params.hasAction(m.target);
+    if (!p && !isAction) { console.error(`[vis] mapeo ${m.id}: destino desconocido ${m.target}`); return false; }
+
+    const min = m.min ?? p?.min ?? 0;
+    const max = m.max ?? p?.max ?? 1;
+
+    switch (m.mode) {
+      case 'trigger':
+        if (msg.kind === 'note' && !msg.on) return false;
+        if (isAction) this.params.trigger(m.target, m.arg);
+        else this.params.set(m.target, m.arg ?? true);
+        return true;
+
+      case 'toggle':
+        if (msg.kind === 'note' && !msg.on) return false;
+        this.params.set(m.target, !this.params.target(m.target));
+        return true;
+
+      case 'gate':
+        if (p?.type === 'bool') this.params.set(m.target, !!msg.on);
+        else this.params.set(m.target, msg.on ? min + (msg.velocity / 127) * (max - min) : 0);
+        return true;
+
+      case 'velocity':
+        if (msg.kind === 'note' && !msg.on) return false;
+        this.params.set(m.target, min + (msg.velocity / 127) * (max - min));
+        return true;
+
+      case 'set':
+        if (msg.kind === 'note' && !msg.on) return false;
+        if (isAction) this.params.trigger(m.target, m.value);
+        else this.params.set(m.target, m.value);
+        return true;
+
+      case 'range': {
+        let n;
+        if (msg.kind === 'cc') n = msg.value / 127;
+        else {
+          const raw = Number(msg.args?.[0] ?? 0);
+          const [a, b] = m.in ?? [0, 1];
+          n = b === a ? 0 : (raw - a) / (b - a);
+        }
+        n = applyCurve(clamp(n, 0, 1), m.curve);
+        if (p?.type === 'bool') this.params.set(m.target, n >= 0.5);
+        else if (p?.type === 'enum') this.params.setNormalized(m.target, n);
+        else this.params.set(m.target, min + n * (max - min));
+        return true;
+      }
+
+      default:
+        console.error(`[vis] mapeo ${m.id}: modo desconocido ${m.mode}`);
+        return false;
+    }
+  }
+
+  // /p/<id> valor nativo · /pn/<id> 0..1 · /a/<id> acción · /scene id
+  _autoOsc(msg) {
+    const parts = msg.address.split('/').filter(Boolean);
+    const head = parts[0];
+    const id = parts.slice(1).join('.');
+    const arg = msg.args?.[0];
+
+    if (head === 'p' && this.params.has(id)) { this.params.set(id, arg); return true; }
+    if (head === 'pn' && this.params.has(id)) { this.params.setNormalized(id, Number(arg)); return true; }
+    if (head === 'a' && this.params.hasAction(id)) { this.params.trigger(id, arg); return true; }
+    if (head === 'scene' && arg !== undefined) { this.params.trigger('scene.goto', String(arg)); return true; }
+    return false;
+  }
+
+  _assignLearn(msg) {
+    const row = this.mappings.find((m) => m.id === this.learnRow);
+    this.learnRow = null;
+    if (!row) return;
+
+    row.source = msg.kind === 'note' ? { kind: 'note', channel: msg.channel, note: msg.note }
+      : msg.kind === 'cc' ? { kind: 'cc', channel: msg.channel, cc: msg.cc }
+      : { kind: 'osc', address: msg.address };
+
+    // Modo por defecto inferido del tipo de fuente y de destino.
+    if (!row.mode || row.mode === 'auto') row.mode = inferMode(msg, row.target, this.params);
+    if (row.mode === 'range' && row.min == null) {
+      const p = this.params.def(row.target);
+      if (p) { row.min = p.min; row.max = p.max; }
+    }
+    this._reindex();
+    this.save();
+    this._emit('mappings');
+  }
+
+  _record(msg, fired) {
+    this.monitor.unshift({ t: Date.now(), msg, fired });
+    if (this.monitor.length > 50) this.monitor.length = 50;
+    this._emit('monitor', { msg, fired });
+  }
+}
+
+export function sourceKey(source) {
+  if (!source || !source.kind) return null;
+  if (source.kind === 'note') return `note:${source.channel}:${source.note}`;
+  if (source.kind === 'cc') return `cc:${source.channel}:${source.cc}`;
+  if (source.kind === 'osc') return `osc:${source.address}`;
+  return null;
+}
+
+export function describeSource(source) {
+  if (!source || !source.kind) return '(sin asignar)';
+  if (source.kind === 'note') return `Nota ${source.note} ch${source.channel}`;
+  if (source.kind === 'cc') return `CC ${source.cc} ch${source.channel}`;
+  if (source.kind === 'osc') return source.address;
+  return '?';
+}
+
+function isLearnable(msg) {
+  return msg.kind === 'osc' || msg.kind === 'cc' || (msg.kind === 'note' && msg.on);
+}
+
+function inferMode(msg, target, params) {
+  if (msg.kind === 'cc' || msg.kind === 'osc') return 'range';
+  if (params.hasAction(target)) return 'trigger';
+  const p = params.def(target);
+  if (p?.type === 'bool') return 'toggle';
+  return 'velocity';
+}
+
+function applyCurve(n, curve) {
+  if (curve === 'exp') return n * n;
+  if (curve === 'log') return Math.sqrt(n);
+  return n;
+}
