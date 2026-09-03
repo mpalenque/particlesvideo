@@ -79,6 +79,8 @@ export class Bridge {
         t: 'stats',
         fps: engine.fps,
         ms: Number(engine.frameMs.toFixed(2)),
+        simMs: Number(engine.simMs.toFixed(2)),
+        renderMs: Number(engine.renderMs.toFixed(2)),
         particles: engine.sim?.numParticles ?? 0,
         dpr: window.devicePixelRatio,
       });

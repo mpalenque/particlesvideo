@@ -18,6 +18,9 @@ export class Engine {
     this.time = 0;
     this.fps = 0;
     this.frameMs = 0;
+    this.simMs = 0;
+    this.renderMs = 0;
+    this._lastFrameAt = 0;
     this.fpsEl = null;
     this.fpsVisible = false;
     this._frames = 0;
@@ -39,10 +42,16 @@ export class Engine {
 
   start() {
     this.renderer.setAnimationLoop(() => this._tick());
+    // Red de contención: si la ventana queda tapada Chrome frena requestAnimationFrame y el
+    // show se congela. Esto lo mantiene vivo a ~4 fps. NO reemplaza tener la ventana al frente.
+    this._watchdog = setInterval(() => {
+      if (!this._busy && performance.now() - this._lastFrameAt > 500) this._tick();
+    }, 250);
   }
 
   stop() {
     this.renderer.setAnimationLoop(null);
+    clearInterval(this._watchdog);
   }
 
   async _tick() {
@@ -57,15 +66,22 @@ export class Engine {
       this.scenes.update(dt);
       this.layer2d.update(dt, this.time);
       this.layer3d.update(dt, this.time);
+
+      const tSim = performance.now();
       if (this.sim) await this.sim.update(dt);
+      this.simMs = performance.now() - tSim;
+
+      const tRender = performance.now();
       this.compositor.update();
       await this.compositor.render();
+      this.renderMs = performance.now() - tRender;
     } catch (err) {
       console.error('[vis] error en el frame', err);
       this.stop();
     }
 
     this.frameMs = performance.now() - t0;
+    this._lastFrameAt = performance.now();
     this._updateFps(dt);
     this.ctx.bridge?.tick(this);
     this._busy = false;
@@ -78,7 +94,7 @@ export class Engine {
       this.fps = Math.round(this._frames / this._fpsAccum);
       if (this.fpsEl && this.fpsVisible) {
         const dpr = window.devicePixelRatio;
-        this.fpsEl.textContent = `${this.fps} fps · ${this.frameMs.toFixed(1)} ms${dpr !== 1 ? ` · dpr ${dpr} (!)` : ''}`;
+        this.fpsEl.textContent = `${this.fps} fps · ${this.frameMs.toFixed(1)} ms (sim ${this.simMs.toFixed(1)} · render ${this.renderMs.toFixed(1)})${dpr !== 1 ? ` · dpr ${dpr} ¡debe ser 1!` : ''}`;
       }
       this._frames = 0;
       this._fpsAccum = 0;

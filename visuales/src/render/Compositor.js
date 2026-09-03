@@ -8,6 +8,7 @@ export class Compositor {
     params.define({ id: 'master.brightness', type: 'float', min: 0, max: 1, default: 1, label: 'Brillo master', group: 'master', sceneReset: false });
     params.define({ id: 'master.blackout', type: 'bool', default: false, label: 'Blackout', group: 'master', sceneReset: false });
     params.define({ id: 'master.bloomEnabled', type: 'bool', default: true, label: 'Bloom on', group: 'master', sceneReset: false });
+    params.define({ id: 'master.quality', type: 'enum', options: ['ultra', 'high', 'medium', 'low'], default: 'high', label: 'Calidad', group: 'master', sceneReset: false });
     params.define({ id: 'bloom.strength', type: 'float', min: 0, max: 2, default: 0.9, label: 'Bloom fuerza', group: 'bloom', sceneReset: false });
     params.define({ id: 'bloom.radius', type: 'float', min: 0, max: 1, default: 0.8, label: 'Bloom radio', group: 'bloom', sceneReset: false });
     params.define({ id: 'bloom.threshold', type: 'float', min: 0, max: 1, default: 0, label: 'Bloom umbral', group: 'bloom', sceneReset: false });

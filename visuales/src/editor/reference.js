@@ -22,6 +22,9 @@ export function sourcesFor(id, mappings) {
   return mappings.filter((m) => m.target === id && m.source?.kind).map((m) => m.source);
 }
 
+// Los '|' de enums y bools rompen las tablas Markdown si no se escapan.
+const mdCell = (v) => String(v ?? '').replaceAll('|', '\\|');
+
 export function rangeOf(def) {
   if (def.isAction) return def.argHint || '';
   if (def.type === 'enum') return def.options.join(' | ');
@@ -39,7 +42,7 @@ export function buildReferenceMarkdown(registry, mappings, scenes) {
   for (const s of scenes) {
     const src = mappings.filter((m) => m.target === 'scene.goto' && String(m.arg) === String(s.id))
       .map((m) => describeSource(m.source)).filter(Boolean).join(', ');
-    lines.push(`| ${s.id} | ${s.name ?? ''} | ${src} |`);
+    lines.push(`| ${s.id} | ${mdCell(s.name)} | ${mdCell(src)} |`);
   }
   lines.push('');
 
@@ -54,7 +57,7 @@ export function buildReferenceMarkdown(registry, mappings, scenes) {
     lines.push(`### ${group}`, '', '| id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |', '|---|---|---|---|---|---|---|');
     for (const def of defs) {
       const src = sourcesFor(def.id, mappings).map(describeSource).join(', ');
-      lines.push(`| \`${def.id}\` | ${def.label} | ${def.isAction ? 'acción' : def.type} | ${rangeOf(def)} | \`${oscAddress(def)}\` | ${oscAddressNormalized(def) ? `\`${oscAddressNormalized(def)}\`` : ''} | ${src} |`);
+      lines.push(`| \`${def.id}\` | ${mdCell(def.label)} | ${def.isAction ? 'acción' : def.type} | ${mdCell(rangeOf(def))} | \`${oscAddress(def)}\` | ${oscAddressNormalized(def) ? `\`${oscAddressNormalized(def)}\`` : ''} | ${mdCell(src)} |`);
     }
     lines.push('');
   }

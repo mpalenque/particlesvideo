@@ -67,12 +67,37 @@ async function boot() {
 
   new Keyboard(ctx, { onToggleFps: () => engine.toggleFps() }).init();
 
+  applyQualityPresets(params);
+
   scenes.goto(SCENES[0].id, { transition: 0 });
   engine.start();
 
   window.vis = ctx;             // acceso desde la consola en desarrollo
   Object.assign(window.vis, { engine, layer2d, layer3d, midi, osc });
   console.info('[vis] arrancado ·', params.list().length, 'params/actions ·', mapper.mappings.length, 'mapeos');
+}
+
+// Presets de calidad: un solo control para bajar carga si hace falta. Se persiste porque
+// depende de la máquina, no del show.
+const QUALITY = {
+  ultra: { count: 524288, bloom: true },
+  high: { count: 262144, bloom: true },
+  medium: { count: 131072, bloom: true },
+  low: { count: 65536, bloom: false },
+};
+
+function applyQualityPresets(params) {
+  const apply = (name) => {
+    const preset = QUALITY[name];
+    if (!preset) return;
+    params.set('particles.count', preset.count);
+    params.set('master.bloomEnabled', preset.bloom);
+    localStorage.setItem('vis.quality', name);
+  };
+  params.onChange('master.quality', apply);
+  const saved = localStorage.getItem('vis.quality');
+  if (saved && QUALITY[saved]) params.set('master.quality', saved);
+  apply(params.get('master.quality'));
 }
 
 boot().catch(showFatalError);

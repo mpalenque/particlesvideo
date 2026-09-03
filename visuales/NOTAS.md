@@ -136,3 +136,35 @@ habilitada), así que la medición es de throughput real con vsync desactivado.
   reutilizados): no se crea ni un objeto por frame en el loop.
 - Verificado: 8 barras cayendo a la vez a 6 m/s con sus 8 repulsores publicados, 480 esquirlas
   al impactar que se apagan solas, y 245 fps sin vsync con partículas + rayos + bloom.
+
+## Fases 8 y 9
+
+- **`master.quality`** agrega un preset `ultra` (524 288) además de los tres del plan, porque en la
+  3090 sobra margen. Se persiste en `localStorage` (depende de la máquina, no del show).
+- **`simMs` y `renderMs` son tiempo de CPU, no de GPU.** `computeAsync` vuelve antes de que la GPU
+  termine, así que `simMs` da casi 0 y `renderMs` se lleva casi todo. Sirven para ver dónde se traba
+  la CPU, pero el número real de rendimiento es el frame time / fps. Las consultas de timestamp de
+  la GPU (`?stats`) devuelven 0 en Chrome headless; en el Chrome normal de Manuel deberían andar.
+- **Red de contención para el rAF frenado**: si la ventana queda tapada, un `setInterval` mantiene
+  el loop a ~4 fps para que el show no quede congelado. No reemplaza tener la ventana al frente.
+- **Objetos por frame**: verificado que ningún `update` crea materiales, geometrías ni vectores en
+  loops calientes (`Debris` preasigna todo para sus 4000 instancias). Lo único que se asigna por
+  frame son arrays de ≤ 10 elementos al compactar los pools de barridos, líneas y rayos —
+  despreciable y no crece con la cantidad de partículas.
+- `tools/walk-scenes.mjs`, `tools/soak.mjs` y `tools/gen-reference.mjs` agregados (ver README §8).
+- **Pendiente de Manuel**: `public/mappings.default.json` tiene las filas de cada escena y un ejemplo
+  de cada modo, pero **sin fuente asignada**. Hay que hacer el learn con Ableton y después
+  Exportar JSON → copiar sobre ese archivo para que los mapeos viajen con el proyecto.
+
+### Prueba de estabilidad (`node tools/soak.mjs 10 22`)
+
+10 minutos en la escena 22 con un rayo cada 400 ms, 262 144 partículas y bloom, a 2688 × 1008:
+
+```
+fps  mín 60  máx 60
+heap 68 MB → 67 MB (máx 73)
+geometrías 11 (estable)
+errores: ninguno
+```
+
+Sin caída de fps ni crecimiento de memoria. Cumple el criterio de la Fase 9.

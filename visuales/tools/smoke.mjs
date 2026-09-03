@@ -79,7 +79,10 @@ await sleep(SECONDS * 1000);
 
 const evaled = await send('Runtime.evaluate', { expression: EXPR, returnByValue: true, awaitPromise: true });
 const shot = await send('Page.captureScreenshot', { format: 'png' });
-if (shot?.data) writeFileSync(OUT, Buffer.from(shot.data, 'base64'));
+if (shot?.data && OUT !== '/dev/null') writeFileSync(OUT, Buffer.from(shot.data, 'base64'));
+// DUMP: si la evaluación devuelve {__files}, se escriben a disco
+const val = evaled?.result?.value;
+if (val && val.__files) { for (const [f, c] of Object.entries(val.__files)) writeFileSync(f, c); console.log('archivos escritos:', Object.keys(val.__files).join(', ')); }
 
 console.log('=== CONSOLA ===');
 console.log(logs.join('\n') || '(vacía)');
