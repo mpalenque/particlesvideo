@@ -18,7 +18,7 @@ const chrome = spawn(CHROME, [
   '--headless=new',
   '--remote-debugging-port=9333',
   `--user-data-dir=${profile}`,
-  '--enable-unsafe-webgpu',
+  '--enable-unsafe-webgpu', '--enable-dawn-features=allow_unsafe_apis', '--disable-gpu-vsync', '--disable-frame-rate-limit',
   '--enable-features=Vulkan',
   '--use-angle=default',
   '--window-size=1600,600',

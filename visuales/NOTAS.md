@@ -79,3 +79,35 @@ Qué se hizo distinto al plan y por qué, y problemas conocidos. Corto.
 - **Horizonte verificado con la cámara en vivo**: con el ojo a 2.2 m el punto de fuga cae en y ≈ 269 px,
   que es exactamente 1008 × (1 − 2.2/3). Con el ojo a 1.0 m cae en 672. La pantalla funciona como ventana.
 - El cubo de prueba de la Fase 1 se eliminó.
+
+## Fase 5
+
+Port del MLS-MPM. Dos calibraciones fueron necesarias porque **la grilla del repo original era
+anisotrópica** (celdas de 0.125 × 0.047 × 0.047 m) y la nuestra es isotrópica de 0.1 m:
+
+- **`DENSITY_CALIBRATION = 9` en `MlsMpmSimulator.js`.** El volumen natural del fluido es
+  `count / restDensity` celdas, que con la fórmula del original queda fijo en ~82 m³ con nuestras
+  celdas — 4× la caja de 2.6 × 3 × 2.6 m. El fluido quedaba aplastado contra las paredes y se veía
+  como un bloque blanco sólido. La constante lo lleva a ~9 m³ con `particles.density` en su default.
+- **Tamaño del palito en metros (`BASE_THICKNESS_M` / `BASE_LENGTH_M` en `StickRenderer.js`).**
+  El original metía la relación de aspecto de sus celdas en la escala del objeto; acá se expresa
+  directo en metros. Calibrado contra STORYBOARD/10.png: con los defaults del plan (262144, size 2,
+  length 1) da palitos de ~3.3 mm × 2.5 cm. Los defaults del registro **no** cambiaron.
+- Ojo con esto si se cambia `stage.sim.cellSize`: las dos constantes están atadas al tamaño de celda.
+
+Otros desvíos:
+
+- La pared exterior del dominio está **siempre activa** (no solo cuando la caja está desactivada):
+  es el borde del escenario, y es lo que sostiene el modo "libres" de la escena 20.
+- `?stats` en la URL activa `trackTimestamp` del renderer (tiene costo, por eso no va en el show).
+
+### Rendimiento medido (RTX 3090, 2688 × 1008, con bloom, sin vsync)
+
+| Partículas | ms/frame | fps |
+|---|---|---|
+| 262 144 (default) | 4.09 | 244 |
+| 524 288 (preset "ultra") | 7.87 | 127 |
+
+Sobra margen para 60 fps en las dos: el preset "ultra" es viable para el show.
+Las consultas de timestamp de la GPU devuelven 0 en Chrome headless (la feature no está
+habilitada), así que la medición es de throughput real con vsync desactivado.

@@ -78,4 +78,35 @@ export const SCENES = [
     params: { 'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.scrollSpeed': 0.6 },
     mainAction: 'grid.toggleAll',
   },
+  {
+    id: '10', name: 'Caja + palitos blancos', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 0,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'particles.opacity': 1, 'particles.baseColor': '#FFFFFF', 'particles.turbulence': 0.8,
+    },
+    actions: [['particles.resetInBox']],
+    mainAction: 'particles.resetInBox',
+  },
+  {
+    id: '11', name: 'Piso + palitos rojos', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    actions: [['floor.reveal']],
+    mainAction: 'particles.resetInBox',
+  },
+  {
+    id: '13', name: 'Caja + rojos (turbulencia)', transition: 1.5,
+    params: {
+      'layer3d.opacity': 1, 'floor.opacity': 1,
+      'box.visible': 1, 'box.enabled': true, 'box.preset': 'center',
+      'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.turbulence': 0.8,
+      'particles.whiteSpeedMin': 0.8,
+    },
+    mainAction: 'particles.resetInBox',
+  },
 ];

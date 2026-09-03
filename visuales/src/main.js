@@ -40,6 +40,7 @@ async function boot() {
   compositor.init();
 
   const engine = new Engine(ctx, { layer2d, layer3d, compositor });
+  engine.sim = layer3d.sim;
   engine.initFpsOverlay();
 
   // IO: todo lo que entra pasa por el Mapper, que solo escribe en Params.

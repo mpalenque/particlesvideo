@@ -4,7 +4,9 @@ import { STAGE } from '../config/stage.js';
 // Crea el WebGPURenderer a tamaño fijo (2688 × 1008, pixelRatio 1) y lo mete en #stage.
 // El escalado a la ventana es puro CSS (transform: scale) para no tocar la resolución real.
 export async function createRenderer() {
-  const renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });
+  // ?stats activa las consultas de timestamp de la GPU (tienen costo, no van en el show).
+  const trackTimestamp = new URLSearchParams(location.search).has('stats');
+  const renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false, powerPreference: 'high-performance', trackTimestamp });
   await renderer.init();
 
   if (!renderer.backend.isWebGPUBackend) {
