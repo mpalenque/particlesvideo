@@ -1,11 +1,12 @@
 // Atajos de desarrollo en la ventana de salida (§7.4). No hay UI sobre la LED.
 export class Keyboard {
-  constructor(ctx, { onToggleFps, onToggleSceneBar } = {}) {
+  constructor(ctx, { onToggleFps, onToggleSceneBar, onToggleNativeView } = {}) {
     this.ctx = ctx;
     this.params = ctx.params;
     this.scenes = ctx.scenes;
     this.onToggleFps = onToggleFps;
     this.onToggleSceneBar = onToggleSceneBar;
+    this.onToggleNativeView = onToggleNativeView;
   }
 
   init() {
@@ -17,6 +18,7 @@ export class Keyboard {
         case 'e': case 'E': window.open('/editor.html', 'vis-editor'); break;
         case 'f': case 'F': this.onToggleFps?.(); break;
         case 's': case 'S': this.onToggleSceneBar?.(); break;
+        case 'p': case 'P': this.onToggleNativeView?.(); break;   // 1:1, para juzgar nitidez
         case ',': this.params.trigger('scene.prev'); break;
         case '.': this.params.trigger('scene.next'); break;
         case ' ': {

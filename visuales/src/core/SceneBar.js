@@ -32,7 +32,7 @@ export class SceneBar {
 
     const hint = document.createElement('span');
     hint.className = 'sb-hint';
-    hint.textContent = 'S oculta · , . cambia · Espacio dispara · F fps · E editor';
+    hint.textContent = 'S oculta · P vista 1:1 · , . cambia · Espacio dispara · F fps · E editor';
     bar.appendChild(hint);
 
     document.body.appendChild(bar);

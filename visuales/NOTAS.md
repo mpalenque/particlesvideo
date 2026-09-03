@@ -168,3 +168,19 @@ errores: ninguno
 ```
 
 Sin caída de fps ni crecimiento de memoria. Cumple el criterio de la Fase 9.
+
+## Nitidez del piso (post Fase 9)
+
+Manuel reportó que las tiras del piso se veían pixeladas / "resampleadas". Eran dos cosas distintas:
+
+1. **El shader difuminaba de más.** El antialias usaba `smoothstep` con `fwidth`, que es isotrópico:
+   en el piso, con la cámara casi a ras, el pixel se estira muchísimo en Z respecto de X, así que
+   el borde se desparramaba ~6 px. Reemplazado por **filtrado analítico** (`pulseCoverage` en
+   `Floor.js`): se integra el tren de pulsos y se calcula la cobertura EXACTA del pixel, por eje
+   por separado. Con pixel chico da el borde nítido con su fracción justa; con pixel grande
+   converge al promedio (gris uniforme) en vez de moiré. Borde medido: 6 px → 4.3 px en el campo
+   medio, y ~1 px en el cercano.
+2. **La ventana reducía el canvas.** Lo que se veía en una ventana de ~1700 px era el canvas de
+   2688 reducido por el navegador, no la salida real. Ahora el escalado se hace poniendo el
+   **tamaño CSS del canvas** en vez de un `transform: scale()` (filtra mejor), y **`P` alterna a
+   vista 1:1** para poder juzgar nitidez de verdad. El buffer de dibujo siempre es 2688 × 1008.

@@ -1,5 +1,25 @@
 import * as THREE from 'three/webgpu';
-import { uniform, positionWorld, fract, abs, smoothstep, fwidth, float, vec3, Fn, max } from 'three/tsl';
+import { uniform, positionWorld, smoothstep, fwidth, float, vec3, Fn, max, floor, clamp } from 'three/tsl';
+
+// Filtrado analítico de un tren de pulsos periódico.
+// `pulseIntegral` es la integral del patrón desde 0 hasta t: cuánta "tinta" hay acumulada.
+// La diferencia entre los dos extremos del pixel, dividida por su ancho, da la cobertura
+// EXACTA de ese pixel. Con el pixel chico da un borde nítido con su fracción justa
+// (antialias perfecto); con el pixel grande converge al promedio (ancho/período), que es
+// gris uniforme en vez de moiré. Reemplaza al smoothstep con fwidth, que al ser isotrópico
+// desparramaba el borde en los ángulos rasantes del piso.
+const pulseIntegral = (t, period, width) => {
+  const k = floor(t.div(period));
+  return k.mul(width).add(clamp(t.sub(k.mul(period)), float(0), width));
+};
+
+const pulseCoverage = (x, period, width, footprint) => {
+  const half = footprint.mul(0.5);
+  return pulseIntegral(x.add(half), period, width)
+    .sub(pulseIntegral(x.sub(half), period, width))
+    .div(footprint)
+    .clamp(0, 1);
+};
 
 // Piso de carriles punteados con fuga (escena 7+). Los dashes de todos los carriles
 // quedan alineados en filas, como en la imagen 7 del storyboard.
@@ -34,16 +54,16 @@ export class Floor {
     material.colorNode = vec3(1, 1, 1);
     material.opacityNode = Fn(() => {
       const p = positionWorld;
-      const aaX = max(fwidth(p.x), float(0.0005));
-      const aaZ = max(fwidth(p.z), float(0.0005));
-
-      // Distancia al centro del carril más cercano.
-      const lane = abs(fract(p.x.div(u.laneSpacing).add(0.5)).sub(0.5)).mul(u.laneSpacing);
-      const onLane = float(1).sub(smoothstep(u.dashWidth.mul(0.5).sub(aaX), u.dashWidth.mul(0.5).add(aaX), lane));
-
       const zz = p.z.negate().add(u.scroll);
-      const dash = abs(fract(zz.div(u.dashPeriod).add(0.5)).sub(0.5)).mul(u.dashPeriod);
-      const onDash = float(1).sub(smoothstep(u.dashLength.mul(0.5).sub(aaZ), u.dashLength.mul(0.5).add(aaZ), dash));
+
+      // Tamaño del pixel proyectado sobre el piso, por eje. En el piso son muy distintos
+      // (el pixel se estira en Z cerca del horizonte), por eso se filtra cada eje por separado.
+      const footX = max(fwidth(p.x), float(1e-5));
+      const footZ = max(fwidth(zz), float(1e-5));
+
+      // La banda se corre medio ancho para que quede centrada en el eje del carril / del dash.
+      const onLane = pulseCoverage(p.x.add(u.dashWidth.mul(0.5)), u.laneSpacing, u.dashWidth, footX);
+      const onDash = pulseCoverage(zz.add(u.dashLength.mul(0.5)), u.dashPeriod, u.dashLength, footZ);
 
       const depth = p.z.negate();
       const reveal = float(1).sub(smoothstep(u.revealDist.sub(0.5), u.revealDist, depth));  // crece desde la pantalla al fondo

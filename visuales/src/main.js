@@ -16,7 +16,7 @@ import { SCENES } from './scenes/index.js';
 import { BASE } from './scenes/base.js';
 
 async function boot() {
-  const renderer = await createRenderer();
+  const { renderer, view } = await createRenderer();
   console.info('[vis] WebGPU listo · backend', renderer.backend.constructor.name);
 
   // El registro tiene que estar completo antes de crear nada (el editor pide el listado al arrancar).
@@ -72,6 +72,7 @@ async function boot() {
   new Keyboard(ctx, {
     onToggleFps: () => engine.toggleFps(),
     onToggleSceneBar: () => sceneBar.toggle(),
+    onToggleNativeView: () => console.info(`[vis] vista ${view.toggleNative()}`),
   }).init();
 
   applyQualityPresets(params);
