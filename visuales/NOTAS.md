@@ -69,3 +69,13 @@ Qué se hizo distinto al plan y por qué, y problemas conocidos. Corto.
 - **Una pestaña en segundo plano frena `requestAnimationFrame`** (fps → 0). En el show no molesta
   porque salida y editor son ventanas visibles en monitores distintos, pero la ventana de la LED
   tiene que estar en primer plano. Se ataca en la Fase 9.
+
+## Fase 4
+
+- `Floor` usa `positionWorld` + `fwidth` para el antialias de carriles y dashes; el `aa` se clampea a
+  un mínimo para que cerca del horizonte `smoothstep` no reciba los bordes invertidos.
+- Cada elemento 3D multiplica su opacidad por `layer3d.opacity` en su `update` (explícito, sin
+  acoplar los elementos a la capa).
+- **Horizonte verificado con la cámara en vivo**: con el ojo a 2.2 m el punto de fuga cae en y ≈ 269 px,
+  que es exactamente 1008 × (1 − 2.2/3). Con el ojo a 1.0 m cae en 672. La pantalla funciona como ventana.
+- El cubo de prueba de la Fase 1 se eliminó.

@@ -1,10 +1,10 @@
 import * as THREE from 'three/webgpu';
-import { uniform, vec4 } from 'three/tsl';
 import { STAGE } from '../config/stage.js';
 import { OffAxisCamera } from '../render/OffAxisCamera.js';
+import { Floor } from './Floor.js';
 
 export class Layer3D {
-  static ELEMENTS = [];
+  static ELEMENTS = [Floor];
 
   static defineParams(params) {
     params.define({ id: 'layer3d.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Capa 3D', group: 'layer3d' });
@@ -25,7 +25,6 @@ export class Layer3D {
     this.camera.setEye(STAGE.camera.eyeX, STAGE.camera.eyeY, STAGE.camera.eyeZ);
     this.elements = [];
     this._eye = { x: NaN, y: NaN, z: NaN };
-    this.uOpacity = uniform(1);
   }
 
   async init() {
@@ -34,16 +33,6 @@ export class Layer3D {
       await el.init(this.scene);
       this.elements.push(el);
     }
-    this._addTestCube();
-  }
-
-  // Cubo de prueba de la Fase 1 (1 m en (0, 0.5, −2)): se quita en la Fase 4.
-  _addTestCube() {
-    const material = new THREE.MeshBasicNodeMaterial({ transparent: true });
-    material.colorNode = vec4(0.2, 0.6, 1.0, this.uOpacity);
-    this.testCube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
-    this.testCube.position.set(0, 0.5, -2);
-    this.scene.add(this.testCube);
   }
 
   update(dt, t) {
@@ -54,7 +43,6 @@ export class Layer3D {
       this.camera.setEye(x, y, z);
       this._eye.x = x; this._eye.y = y; this._eye.z = z;
     }
-    this.uOpacity.value = this.params.get('layer3d.opacity');
     for (const el of this.elements) el.update(dt, t);
   }
 

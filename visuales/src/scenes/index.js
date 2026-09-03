@@ -61,4 +61,21 @@ export const SCENES = [
     },
     mainAction: ['sweep.blue', 'random'],
   },
+  {
+    id: '7', name: 'Piso con fuga', transition: 2.0,
+    params: { 'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.scrollSpeed': 0.6 },
+    actions: [['floor.reveal']],
+    mainAction: 'grid.toggleAll',      // las grillas 2D pueden volver a jugar encima
+  },
+  // 8 y 9 todavía no están definidas en el storyboard: por ahora son copias de la 7.
+  {
+    id: '8', name: 'Piso (placeholder)', transition: 2.0,
+    params: { 'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.scrollSpeed': 0.6 },
+    mainAction: 'grid.toggleAll',
+  },
+  {
+    id: '9', name: 'Piso (placeholder)', transition: 2.0,
+    params: { 'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.scrollSpeed': 0.6 },
+    mainAction: 'grid.toggleAll',
+  },
 ];

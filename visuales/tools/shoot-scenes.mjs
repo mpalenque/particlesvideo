@@ -54,16 +54,11 @@ await sleep(7000);
 
 // [nombre, expresión previa, espera en ms]
 const SHOTS = [
-  ['1',  "vis.scenes.goto('1',{transition:0})", 900],
-  ['1b', "vis.params.trigger('warning.bgOff')", 2600],
-  ['2',  "vis.scenes.goto('2',{transition:0}); vis.params.trigger('line.strike','center')", 1200],
-  ['2b', "vis.params.trigger('line.flip')", 900],
-  ['3',  "vis.scenes.goto('3',{transition:0})", 900],
-  ['4',  "vis.scenes.goto('4',{transition:0})", 900],
-  ['5',  "vis.scenes.goto('5',{transition:0})", 900],
-  ['6',  "vis.scenes.goto('6',{transition:0}); vis.params.trigger('sweep.blue','3')", 700],
-  ['6b', "vis.params.trigger('sweep.white','2')", 600],
-  ['6c', "vis.params.trigger('sweep.solid','4')", 500],
+  ['7-inicio', "vis.scenes.goto('7',{transition:0})", 700],
+  ['7-medio',  '', 1500],
+  ['7-lleno',  '', 3500],
+  ['7-grillas', "vis.params.trigger('grid.toggleAll'); vis.params.set('grid.opacity',1)", 900],
+  ['7-ojo-alto', "vis.params.set('camera.eyeY',2.2)", 700],
 ];
 
 for (const [name, expr, wait] of SHOTS) {
