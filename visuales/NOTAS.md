@@ -272,3 +272,22 @@ y Canvas2D antialíasa los bordes de cualquier trazo por defecto.
 El grosor pedido (`stripe`) es vertical, pero `lineWidth` mide perpendicular al trazo; en una
 pendiente perpendicular = vertical × cos(ángulo), así que se compensa (`cosAngle` calculado desde
 la geometría del zigzag) para que el ancho visual de la franja sea el mismo que antes.
+
+## MSAA de hardware en el pase 3D
+
+Manuel pidió mejorar más el antialiasing de los carriles del piso y confirmar que se usa WebGPU.
+Confirmado: `renderer.backend.constructor.name === 'WebGPUBackend'`, `isWebGPUBackend === true`.
+
+Se agregó **MSAA 4x real** (`pass(scene, camera, { samples: 4 })`) solo al pase 3D — es
+antialiasing de hardware, no un shader: suaviza el borde de cualquier geometría (cubitos del piso,
+palitos, aristas de la caja) sin el costo de un post-proceso ni el efecto de "promediar" que hizo
+que sacáramos el filtrado analítico del piso. La capa 2D **no** lleva MSAA (necesita líneas a pixel
+exacto). `render.msaa` (bool, default true) lo prende/apaga; el `renderTarget.samples` se reasigna
+cada frame pero el backend de WebGPU solo recrea el render target si el valor realmente cambió
+(lo compara él mismo), así que no tiene costo cuando no cambia.
+
+Nota técnica: WebGPU solo soporta 1 o 4 muestras por pixel (no 2 o 3), por eso el param es bool y
+no un número intermedio.
+
+Costo: sin cambio medible (242 fps con partículas + AO + luces, escena 13). Las 23 escenas siguen
+a 60 fps.

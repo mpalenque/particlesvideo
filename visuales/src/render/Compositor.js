@@ -17,6 +17,10 @@ export class Compositor {
     params.define({ id: 'ao.amount', type: 'float', min: 0, max: 1, default: 0.85, label: 'Intensidad AO', group: 'ao', sceneReset: false });
     params.define({ id: 'ao.distance', type: 'float', min: 0.05, max: 2, default: 0.35, label: 'Radio AO (m)', group: 'ao', sceneReset: false });
     params.define({ id: 'ao.thickness', type: 'float', min: 0.05, max: 4, default: 1.0, label: 'Grosor AO', group: 'ao', sceneReset: false });
+    // MSAA de hardware (WebGPU), no un truco de shader: suaviza los bordes de la GEOMETRÍA 3D
+    // (aristas de la caja, cubitos del piso, palitos) sin tocar la capa 2D, que necesita líneas
+    // a pixel exacto. WebGPU soporta 1 o 4 muestras por pixel (no valores intermedios).
+    params.define({ id: 'render.msaa', type: 'bool', default: true, label: 'Antialiasing 3D (MSAA)', group: 'render', sceneReset: false });
   }
 
   constructor(ctx, layer2d, layer3d) {
@@ -27,7 +31,10 @@ export class Compositor {
   }
 
   init() {
-    const scene3DPass = pass(this.layer3d.scene, this.layer3d.camera);
+    // samples: 4 = MSAA 4x del hardware sobre el pase 3D. Solo WebGL lo tiene deshabilitado
+    // en three (comentario "TODO" en PassNode); en WebGPU corre en el backend real.
+    const scene3DPass = pass(this.layer3d.scene, this.layer3d.camera, { samples: 4 });
+    this.scene3DPass = scene3DPass;
     // El MRT saca además la normal de vista, que es lo que necesita el GTAO junto con la
     // profundidad para calcular la oclusión.
     scene3DPass.setMRT(mrt({ output, normal: transformedNormalView, bloomIntensity: float(0) }));
@@ -70,6 +77,9 @@ export class Compositor {
     this.aoPass.distanceExponent.value = 1;
     this.aoPass.radius.value = this.params.get('ao.distance');
     this.aoPass.thickness.value = this.params.get('ao.thickness');
+    // El backend recrea el render target solo cuando el valor cambia (lo compara él mismo),
+    // así que reasignar cada frame no tiene costo cuando no cambió.
+    this.scene3DPass.renderTarget.samples = this.params.get('render.msaa') ? 4 : 0;
   }
 
   async render() {
