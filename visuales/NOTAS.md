@@ -198,8 +198,19 @@ Manuel reportó que las tiras del piso se veían pixeladas / "resampleadas". Era
 - **Palitos ~25 % más grandes** y **transición a blanco mucho más tardía**
   (`whiteSpeedMin` 0.6 → 2, `whiteSpeedMax` 3 → 7): con los valores viejos apenas aceleraban
   ya se ponían blancos y se perdía el rojo/azul de la escena.
-- **Piso más nítido y con más presencia a la distancia.** Tres cambios: dashes más gruesos
-  (carriles 0.5 → 0.7 m, ancho 0.08 → 0.15, largo 0.4 → 0.55), el `farFade` deja de comer el campo
-  medio (empieza al 85 % de `fadeFar`, que subió a 45 m) y se agregó **`floor.contrast`** (gamma
-  sobre la cobertura filtrada, default 0.45). El promedio de área es físicamente correcto pero deja
-  un gris muy oscuro lejos; el gamma lo levanta sin volver al aliasing.
+- **Piso: de shader procedural a geometría real.** Manuel lo pidió explícitamente ("cubitos pero
+  finitos", "quiero que sea PURO el pixel"). Cada dash es ahora una **caja instanciada** en vez de
+  un patrón pintado con un shader filtrado: cada píxel sale blanco puro o negro puro, sin el gris
+  de promediar que a él le leía como ruido.
+
+  La grilla entera (41 carriles × 110 filas = 4510 instancias) se arma **en el vertex shader** desde
+  `instanceIndex`: no hay matrices que componer ni subir por frame. El scroll es el patrón
+  desplazándose módulo el período, así que el loop no se nota. Param nuevo `floor.dashHeight`
+  (0.03 m) porque las cajas tienen altura; `floor.contrast` se eliminó (no aplica sin filtrado).
+
+  **El costo de esto es aliasing en movimiento**: sin filtrado, los dashes lejanos titilan cuando el
+  piso avanza. Es la contrapartida inevitable de tener pixel puro, y fue una decisión consciente de
+  Manuel después de ver las dos versiones. Si en la LED el titileo molesta, la palanca es bajar
+  `floor.fadeFar` para que no se dibujen los que ya no se resuelven.
+
+  Rendimiento: 444 fps solo el piso, 184 con las partículas encima (sin vsync).
