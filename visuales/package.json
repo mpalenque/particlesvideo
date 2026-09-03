@@ -1,0 +1,23 @@
+{
+  "name": "visuales-led",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --port 5173",
+    "osc": "node tools/osc-bridge.mjs",
+    "start": "concurrently -k \"npm:dev\" \"npm:osc\""
+  },
+  "dependencies": {
+    "three": "0.176.0",
+    "tweakpane": "^4.0.5",
+    "@tweakpane/plugin-essentials": "^0.2.1"
+  },
+  "devDependencies": {
+    "vite": "^6.3.1",
+    "concurrently": "^9.0.0",
+    "osc": "^2.4.5",
+    "ws": "^8.18.0"
+  }
+}
