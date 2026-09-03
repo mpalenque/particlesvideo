@@ -3,6 +3,7 @@ import { Params } from './core/Params.js';
 import { SceneManager } from './core/SceneManager.js';
 import { Engine } from './core/Engine.js';
 import { Keyboard } from './core/Keyboard.js';
+import { SceneBar } from './core/SceneBar.js';
 import { Layer2D } from './layers2d/Layer2D.js';
 import { Layer3D } from './layers3d/Layer3D.js';
 import { Compositor } from './render/Compositor.js';
@@ -65,7 +66,13 @@ async function boot() {
   await midi.init();
   osc.connect();
 
-  new Keyboard(ctx, { onToggleFps: () => engine.toggleFps() }).init();
+  const sceneBar = new SceneBar(ctx);
+  sceneBar.init();
+
+  new Keyboard(ctx, {
+    onToggleFps: () => engine.toggleFps(),
+    onToggleSceneBar: () => sceneBar.toggle(),
+  }).init();
 
   applyQualityPresets(params);
 
