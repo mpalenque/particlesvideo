@@ -11,6 +11,16 @@ export class SceneManager {
     this._listeners = [];
   }
 
+  // Params que son PROPIEDAD de las escenas: los lista alguna escena o el BASE. `goto` los
+  // reescribe en cada cambio de escena, así que su `default` es el valor al que caen las
+  // escenas que NO los listan — y por eso nadie más puede pisarlo. Settings lo usa para no
+  // guardar como default algo que en realidad es estado del show.
+  static ownedParams(scenes, base) {
+    const ids = new Set(Object.keys(base));
+    for (const scene of scenes) for (const id of Object.keys(scene.params ?? {})) ids.add(id);
+    return ids;
+  }
+
   static defineParams(params, scenes) {
     const ids = scenes.map((s) => s.id);
     params.define({

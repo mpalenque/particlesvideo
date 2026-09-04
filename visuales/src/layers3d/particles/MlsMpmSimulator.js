@@ -65,6 +65,7 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.flicker', type: 'float', min: 0, max: 1, default: 0, label: 'Titileo', group: 'particles' });
     params.define({ id: 'particles.flickerRate', type: 'float', min: 0.1, max: 40, default: 9, label: 'Titileo (Hz)', group: 'particles' });
     params.defineAction({ id: 'particles.resetInBox', label: 'Reubicar en la caja', group: 'particles' });
+    params.defineAction({ id: 'particles.fillColumn', label: 'Llenar la columna de flujo', group: 'particles' });
     Forces.defineParams(params);
   }
 
@@ -440,7 +441,44 @@ export class MlsMpmSimulator {
       el.get('alive').assign(uint(1));
     })().compute(maxParticles);
 
+    // Arranca el flujo vertical YA en régimen: reparte las partículas por toda la columna, del
+    // piso hasta el techo del reciclado, con la velocidad del flujo puesta. Sin esto, al entrar
+    // en la escena 12 las partículas venían de donde estuvieran (encerradas en la caja de la
+    // escena anterior) y se veían "soltarse" y desordenarse unos segundos antes de organizarse
+    // en chorro. Con esto el chorro ya está lleno y subiendo desde el primer frame.
+    this.kernels.fillColumn = Fn(() => {
+      If(instanceIndex.greaterThanEqual(uint(maxParticles)), () => { Return(); });
+      const seed = instanceIndex.add(u.resetSeed);
+      const rx = hash(seed.mul(uint(5))).sub(0.5).mul(2);
+      const rz = hash(seed.mul(uint(5)).add(uint(1))).sub(0.5).mul(2);
+      const ry = hash(seed.mul(uint(5)).add(uint(2)));
+
+      const x = u.boxCenter.x.add(rx.mul(u.boxHalf.x)).toConst();
+      const z = u.boxCenter.z.add(rz.mul(u.boxHalf.z)).toConst();
+      // Mismo techo que usa el reciclado: la recta del borde del encuadre a esa profundidad.
+      const bottom = float(2.5);
+      const top = u.wrapA.add(u.wrapB.mul(z));
+      const y = mix(bottom, max(top, bottom.add(1)), ry);
+
+      const flow = this.forces.u.flow;
+      const el = this.particleBuffer.element(instanceIndex);
+      el.get('position').assign(clamp(vec3(x, y, z), vec3(2), vec3(u.gridSize).sub(2)));
+      el.get('velocity').assign(flow);
+      el.get('C').assign(mat3(0));
+      el.get('density').assign(float(1));
+      el.get('mass').assign(float(1).sub(hash(seed).mul(0.002)));
+      el.get('direction').assign(normalize(flow.add(vec3(0, 0.001, 0))));
+      el.get('speedSmooth').assign(flow.length());
+      // Edades repartidas: si nacieran todas en 0 crecerían todas juntas y se vería el pulso.
+      el.get('age').assign(hash(seed.add(uint(31))).mul(4));
+      el.get('alive').assign(uint(1));
+    })().compute(maxParticles);
+
     this.params.onAction('particles.resetInBox', () => this.resetInBox());
+    this.params.onAction('particles.fillColumn', () => {
+      this.uniforms.resetSeed.value = (this.uniforms.resetSeed.value + 4409) >>> 0;
+      this._pendingFill = true;
+    });
     this.params.onAction('particles.kick', () => this.forces.triggerKick());
   }
 
@@ -537,6 +575,12 @@ export class MlsMpmSimulator {
     if (this._pendingReset) {
       this._pendingReset = false;
       await this.renderer.computeAsync(this.kernels.resetInBox);
+    }
+    // Va después de `_updateWrapLine`, que es quien deja wrapA/wrapB al día: el llenado los usa
+    // para saber hasta dónde llega la columna.
+    if (this._pendingFill) {
+      this._pendingFill = false;
+      await this.renderer.computeAsync(this.kernels.fillColumn);
     }
     await this.renderer.computeAsync([
       this.kernels.clearGrid, this.kernels.p2g1, this.kernels.p2g2, this.kernels.updateGrid, this.kernels.g2p,

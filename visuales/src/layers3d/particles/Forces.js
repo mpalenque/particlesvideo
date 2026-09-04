@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { uniform, uniformArray, vec2, vec3, float, Loop, If, uint, max, length, clamp, time } from 'three/tsl';
+import { uniform, uniformArray, vec2, vec3, float, Loop, If, uint, max, length, clamp, time, dot, abs, select, mix, normalize } from 'three/tsl';
 import { triNoise3Dvec } from './noise.js';
 import { STAGE } from '../../config/stage.js';
 
@@ -40,6 +40,8 @@ export class Forces {
     // [x, y, z, fuerza] y [radio, 0, 0, 0] en unidades de grilla.
     this.attractors = Array.from({ length: MAX_ATTRACTORS }, () => new THREE.Vector4());
     this.attractorRadii = Array.from({ length: MAX_ATTRACTORS }, () => new THREE.Vector4(1, 0, 0, 0));
+    // [nx, ny, nz, mezcla]: normal del plano del atractor y cuánto pesa el modo plano (0 = punto).
+    this.attractorDirs = Array.from({ length: MAX_ATTRACTORS }, () => new THREE.Vector4(0, 0, 1, 0));
     // [x, yBottom, z, yTop] y [fuerza, radio, 0, 0].
     this.repulsors = Array.from({ length: MAX_REPULSORS }, () => new THREE.Vector4());
     this.repulsorParams = Array.from({ length: MAX_REPULSORS }, () => new THREE.Vector4());
@@ -51,6 +53,7 @@ export class Forces {
       attractorCount: uniform(0, 'uint'),
       attractorPos: uniformArray(this.attractors, 'vec4'),
       attractorRadius: uniformArray(this.attractorRadii, 'vec4'),
+      attractorDir: uniformArray(this.attractorDirs, 'vec4'),
       repulsorCount: uniform(0, 'uint'),
       repulsorSeg: uniformArray(this.repulsors, 'vec4'),
       repulsorParams: uniformArray(this.repulsorParams, 'vec4'),
@@ -68,14 +71,35 @@ export class Forces {
 
     vel.addAssign(u.flow.mul(dt));
 
+    // Atractor de PLANO, no de punto. Con la atracción puntual toda la masa convergía a un
+    // mismo sitio y se veía como un embudo; lo que se quiere es que empuje en una DIRECCIÓN
+    // para que los palitos golpeen la pared del bound a lo ancho. La mezcla (`.w` de
+    // attractorDir) va de 0 (punto, como antes) a 1 (plano puro: todos empujados igual,
+    // perpendicular al bloque, con la caída dependiendo solo de la distancia al plano).
     Loop({ start: uint(0), end: u.attractorCount, type: 'uint', condition: '<' }, ({ i }) => {
       const a = u.attractorPos.element(i);
       const radius = u.attractorRadius.element(i).x;
+      const nd = u.attractorDir.element(i);
       const d = a.xyz.sub(pos);
+
       // División protegida en vez de normalize(): un slot vacío tiene d = 0 y daría NaN.
       const dist = max(length(d), float(0.001));
-      const falloff = float(1).div(float(1).add(dist.div(radius).mul(dist.div(radius))));
-      vel.addAssign(d.div(dist).mul(a.w).mul(falloff).mul(dt));
+      const dirPunto = d.div(dist);
+
+      // Distancia con signo al plano que pasa por el atractor: positiva del lado del que hay
+      // que empujar, así el empuje siempre apunta hacia el bloque desde donde esté la partícula.
+      const perp = dot(d, nd.xyz);
+      const distPlano = max(abs(perp), float(0.001));
+      // `sign()` devuelve 0 justo sobre el plano y ahí la dirección se anularía; esto nunca da 0.
+      const lado = select(perp.lessThan(0), float(-1), float(1));
+      const dirPlano = nd.xyz.mul(lado);
+
+      // La mezcla nunca puede dar el vector nulo: dot(dirPunto, dirPlano) = |perp|/dist ≥ 0,
+      // o sea que los dos apuntan al mismo semiespacio y no se cancelan.
+      const dir = normalize(mix(dirPunto, dirPlano, nd.w));
+      const distUsada = mix(dist, distPlano, nd.w);
+      const falloff = float(1).div(float(1).add(distUsada.div(radius).mul(distUsada.div(radius))));
+      vel.addAssign(dir.mul(a.w).mul(falloff).mul(dt));
     });
 
     If(u.vortexSwirl.greaterThan(0).or(u.vortexPull.greaterThan(0)), () => {
@@ -109,10 +133,20 @@ export class Forces {
     });
   }
 
-  setAttractor(slot, worldPos, strength, radiusM) {
+  // `normal` es la normal del plano del atractor (en el mundo) y `planeBlend` cuánto se usa
+  // el modo plano en vez del puntual. Sin normal, se comporta como antes.
+  setAttractor(slot, worldPos, strength, radiusM, normal = null, planeBlend = 0) {
     const { min: m, cellSize } = STAGE.sim;
     this.attractors[slot].set((worldPos.x - m[0]) / cellSize, (worldPos.y - m[1]) / cellSize, (worldPos.z - m[2]) / cellSize, strength);
     this.attractorRadii[slot].x = Math.max(radiusM / cellSize, 0.01);
+    // La normal es una dirección: no lleva el offset del origen de la grilla, y como la grilla
+    // es isotrópica tampoco cambia de escala. Solo hay que normalizarla.
+    if (normal) {
+      const len = Math.hypot(normal.x, normal.y, normal.z) || 1;
+      this.attractorDirs[slot].set(normal.x / len, normal.y / len, normal.z / len, planeBlend);
+    } else {
+      this.attractorDirs[slot].set(0, 0, 1, 0);
+    }
   }
 
   clearAttractor(slot) {

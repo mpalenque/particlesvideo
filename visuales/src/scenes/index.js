@@ -125,6 +125,9 @@ export const SCENES = [
       'particles.drag': 0.22,
       'particles.whiteSpeedMin': 5, 'particles.whiteSpeedMax': 13,
     },
+    // Entra con la columna ya llena y subiendo: si no, las partículas vienen encerradas en la
+    // caja de la escena anterior y se ve cómo se sueltan y se desordenan antes de armar el chorro.
+    actions: [['particles.fillColumn']],
     mainAction: 'particles.kick',
   },
   {

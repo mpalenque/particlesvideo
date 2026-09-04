@@ -87,7 +87,32 @@ chequear('record guarda con su valor de fábrica', await ev("JSON.parse(localSto
 await send('Page.reload'); await esperarVis(); await sleep(500);
 chequear('lo recién guardado sobrevive a la recarga', await ev("vis.params.get('ao.distance')"), 0.2);
 
+// --- 4. lo que manda la escena NUNCA se guarda ni pisa el default de las demas escenas.
+// Este es el que rompia el show: tocabas la atraccion del bloque rojo estando en la 14 y la
+// escena 7 (que solo tiene que mostrar el piso) se quedaba con particulas, bloque y atractor
+// colgados para siempre, incluso tras recargar.
+await ev("vis.settings.clear()");
+await send('Page.reload'); await esperarVis(); await sleep(800);
+const enLa7 = async () => {
+  await ev("vis.scenes.goto('7',{transition:0})"); await sleep(700);
+  return ev(`[vis.params.get('particles.opacity'), vis.params.get('redBlock.attract'),
+             vis.params.get('vortex.swirl'), vis.layer3d.sim.forces.attractors[0].w].join(',')`);
+};
+chequear('escena 7 limpia de entrada', await enLa7(), '0,0,0,0');
+await ev(`(() => {
+  const bus = new BroadcastChannel('vis-bus');
+  vis.scenes.goto('14', { transition: 0 });
+  bus.postMessage({ t: 'set', id: 'redBlock.attract', value: 6 });
+  bus.postMessage({ t: 'set', id: 'particles.opacity', value: 1 });
+  bus.postMessage({ t: 'set', id: 'vortex.swirl', value: 1.5 });
+})()`);
+await sleep(1200);
+chequear('escena 7 sigue limpia tras tocar la 14', await enLa7(), '0,0,0,0');
+await send('Page.reload'); await esperarVis(); await sleep(800);
+chequear('escena 7 sigue limpia tras recargar', await enLa7(), '0,0,0,0');
+chequear('no se guardo nada de la escena', await ev("Object.keys(JSON.parse(localStorage.getItem('vis.settings') ?? '{}').overrides ?? {}).length"), 0);
+
 console.log(ok.join('\n'));
 const todoOk = ok.every((l) => l.startsWith('OK'));
-console.log(todoOk ? '\nOK: los ajustes viejos se descartan y los vigentes sobreviven' : '\nFALLA');
+console.log(todoOk ? '\nOK: la escena manda, y los ajustes viejos se descartan' : '\nFALLA');
 ws.close(); chrome.kill(); process.exit(todoOk ? 0 : 1);

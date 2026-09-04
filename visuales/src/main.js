@@ -30,7 +30,7 @@ async function boot() {
   const ctx = { params, stage: STAGE, renderer, scenes: null, mapper: null, bridge: null, settings: null };
 
   // Se restaura antes de crear nada: los elementos leen los defaults ya corregidos.
-  const settings = new Settings(params);
+  const settings = new Settings(params, SceneManager.ownedParams(SCENES, BASE));
   settings.load();
   ctx.settings = settings;
 

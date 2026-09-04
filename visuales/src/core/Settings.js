@@ -35,13 +35,23 @@ const OBSOLETOS_V1 = new Set([
 // alguna vez en el editor: el valor viejo le ganaba en silencio y había que acordarse de ir a
 // borrar los ajustes a mano. Nadie se acuerda de eso a las tres de la mañana antes de un show.
 export class Settings {
-  constructor(params) {
+  constructor(params, deEscenas = new Set()) {
     this.params = params;
+    // Ids que alguna escena (o el BASE) lista. Ver `esDeEscena`.
+    this.deEscenas = deEscenas;
     this.overrides = {};
     this._timer = null;
     // Los valores de fábrica ANTES de que `load` empiece a pisarlos con `setDefault`.
     this.fabrica = new Map(params.list().filter((p) => !p.isAction).map((p) => [p.id, p.default]));
   }
+
+  // Un param que alguna escena lista es ESTADO DEL SHOW, no configuración, y guardarlo rompe
+  // las escenas: `SceneManager.goto` cae en el `default` para todo lo que la escena no lista,
+  // así que pisar ese default hace que el ajuste se cuele en TODAS las demás escenas. Tocabas
+  // la atracción del bloque rojo en la 14 y la escena 7 —que solo tiene que mostrar el piso—
+  // se quedaba con partículas, el bloque y el atractor colgados, incluso tras recargar.
+  // El resto (luces, AO, bloom, piso, cámara: lo que ninguna escena escribe) se sigue guardando.
+  esDeEscena(id) { return this.deEscenas.has(id); }
 
   load() {
     let stored;
@@ -52,19 +62,21 @@ export class Settings {
     const entradas = esV1 ? stored : (stored.overrides ?? {});
 
     let aplicados = 0;
-    const descartados = [];
+    const viejos = [];        // el código cambió su valor de fábrica
+    const deEscena = [];      // los maneja la escena, nunca debieron guardarse
     for (const [id, guardado] of Object.entries(entradas)) {
       if (id === '__formato') continue;
       if (!this.params.has(id) || NO_GUARDAR.has(id)) continue;   // params que ya no existen
+      if (this.esDeEscena(id)) { deEscena.push(id); continue; }   // lo maneja la escena
 
       const fabrica = this.fabrica.get(id);
       let value;
       if (esV1) {
-        if (OBSOLETOS_V1.has(id)) { descartados.push(id); continue; }
+        if (OBSOLETOS_V1.has(id)) { viejos.push(id); continue; }
         value = guardado;
       } else {
         // El código movió el valor de fábrica desde que se guardó esto: el ajuste es viejo.
-        if (guardado.d !== fabrica) { descartados.push(id); continue; }
+        if (guardado.d !== fabrica) { viejos.push(id); continue; }
         value = guardado.v;
       }
 
@@ -75,17 +87,21 @@ export class Settings {
     }
 
     if (aplicados) console.info(`[vis] ${aplicados} ajustes restaurados del editor`);
-    if (descartados.length) console.info(`[vis] ${descartados.length} ajustes viejos descartados (cambió su valor de fábrica): ${descartados.join(', ')}`);
+    if (viejos.length) console.info(`[vis] ${viejos.length} ajustes viejos descartados (cambió su valor de fábrica): ${viejos.join(', ')}`);
+    if (deEscena.length) console.info(`[vis] ${deEscena.length} ajustes descartados porque los manda la escena: ${deEscena.join(', ')}`);
     // Se reescribe si hubo migración o descarte, para no volver a evaluarlo en cada arranque.
     // Ojo con el `entradas.length`: sin eso, una instalación limpia (sin nada guardado) entraba
     // igual por acá y escribía un registro vacío 250 ms después de arrancar — o sea pisaba
     // cualquier cosa que se hubiera guardado en ese ratito.
     const huboMigracion = esV1 && Object.keys(entradas).length > 0;
-    if (huboMigracion || descartados.length) this._scheduleSave();
+    if (huboMigracion || viejos.length || deEscena.length) this._scheduleSave();
   }
 
   record(id, value) {
     if (!this.params.has(id) || NO_GUARDAR.has(id)) return;
+    // El valor ya se aplicó en vivo (Bridge hace `set` antes de llamar acá); lo único que no
+    // pasa es que sobreviva al cambio de escena, porque de eso manda la escena.
+    if (this.esDeEscena(id)) return;
     this.overrides[id] = { v: value, d: this.fabrica.get(id) };
     this.params.setDefault(id, value);
     this._scheduleSave();

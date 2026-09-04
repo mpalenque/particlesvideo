@@ -464,3 +464,60 @@ escena 4: las líneas siguen midiendo **1 píxel físico** con escala 130%, igua
 El aviso del overlay y el del editor se quedan (ahora dicen "compensado"): con una escala que no
 sea múltiplo entero el navegador todavía puede correr medio píxel al redondear, así que para el
 show sigue siendo mejor tener el monitor de la LED al 100%. Pero ya no es algo que rompa nada.
+
+## La escena manda: se acabó la fuga de ajustes entre escenas
+
+Manuel reportó que la escena 7 —que solo tiene que mostrar el piso— aparecía con partículas y
+con el bloque rojo, que "quedaban colgados los atractores", que la 12 dejaba de ser un flujo
+para arriba y hacía cualquier cosa, y que todo quedaba "atraído siempre". Con perfil limpio la 7
+se veía bien, así que no eran las escenas.
+
+**La causa era una sola**, y explicaba las cuatro cosas a la vez: `Settings.record` guardaba
+cada ajuste del editor pisando el **`default`** del param, y `SceneManager.goto` cae justo en el
+`default` para todo lo que la escena no lista. O sea que mover un slider en la 14 le cambiaba el
+valor de reposo a **todas** las demás escenas, para siempre y sobreviviendo a la recarga.
+Reproducido con `diag`: tocando `redBlock.attract`, `particles.opacity` y `vortex.swirl` estando
+en la 14, la escena 7 quedaba con `{particulas: 1, atraccion: 6, torbellino: 1.5}` y el atractor
+0 vivo en la GPU.
+
+**El arreglo**: `SceneManager.ownedParams(SCENES, BASE)` devuelve el conjunto de ids que alguna
+escena o el BASE listan — o sea, todo lo que es **estado del show**. Settings no guarda ni pisa
+el default de ninguno de esos. Lo que queda guardándose es lo que ninguna escena escribe: luces,
+AO, bloom, piso, cámara, calidad. Que es exactamente lo que uno quiere que sobreviva.
+
+Contrapartida a tener presente: un ajuste sobre algo que la escena sí maneja (turbulencia,
+opacidad, color) se aplica en vivo pero **se pierde al cambiar de escena**, porque de eso manda
+`scenes/index.js`. Es a propósito. Si alguna vez hace falta que quede, lo que corresponde es
+guardarlo *por escena*, no como default global.
+
+`tools/smoke-settings.mjs` (antes `smoke-settings-viejos.mjs`) cubre las dos reglas: 17
+comprobaciones, incluida la fuga exacta que se reportó.
+
+## Bloque rojo: opaco, temblando, y empujando en una dirección
+
+- **Opaco**: era `depthWrite: false`, así que el piso —que también es transparente— se colaba
+  por encima según el orden de dibujado y se le veían los dashes a través. Ahora escribe
+  profundidad y va con `renderOrder: -1`. Sigue siendo `transparent` porque `redBlock.opacity`
+  tiene que poder fundirlo en las transiciones, pero con alpha 1 se comporta como un opaco.
+- **Vibración** (`redBlock.vibrate`, `redBlock.vibrateRate`): tiembla la placa, perpendicular a
+  su propia cara, con dos senos de frecuencias no múltiplas para que no se vea el ciclo. Es
+  temblor, no parpadeo: nunca deja de ser rojo pleno.
+- **Atractor de plano, no de punto** (`redBlock.attractDir`, 0 = punto, 1 = dirección). El
+  atractor puntual chupaba toda la masa hacia un mismo sitio y quedaba un embudo pegado al
+  bloque. Ahora el empuje es perpendicular al bloque, igual para todos, y la caída depende solo
+  de la distancia **al plano**: la masa entera se corre para ese lado y golpea la pared del
+  bound a lo ancho. El radio subió de 2 a 5 m porque en modo plano se mide perpendicular y con
+  2 m media caja quedaba fuera de alcance.
+
+## La escena 12 arranca ya en régimen
+
+La emisión ya era constante (medido: 51–54% de cobertura parejo de abajo arriba, igual a los
+10 s que a los 30 s). Lo que se notaba era el **arranque**: al entrar desde la 11 las partículas
+venían encerradas en la caja y se veía cómo se soltaban y se desordenaban unos segundos antes de
+armar el chorro.
+
+Kernel nuevo `fillColumn` (action `particles.fillColumn`, que la escena 12 dispara al entrar):
+reparte las partículas por toda la columna, del piso hasta el techo del reciclado —usando la
+misma recta del borde del encuadre— con la velocidad del flujo ya puesta y las edades repartidas.
+Medido a 1 segundo de entrar: 49–52% de cobertura, o sea el mismo régimen que a los 20 s. Sin
+transitorio.
