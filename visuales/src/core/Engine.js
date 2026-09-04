@@ -93,8 +93,13 @@ export class Engine {
     if (this._fpsAccum >= 0.5) {
       this.fps = Math.round(this._frames / this._fpsAccum);
       if (this.fpsEl && this.fpsVisible) {
+        // El dpr ya no es un error: `fitStage` compensa la escala de pantalla dividiendo el
+        // tamaño CSS del canvas, así que el cuadro sale 1:1 igual. Se sigue mostrando porque
+        // con una escala que no sea múltiplo entero el navegador puede correr medio píxel al
+        // redondear, y porque saber que la máquina no está en 100% ayuda a entender el resto.
         const dpr = window.devicePixelRatio;
-        this.fpsEl.textContent = `${this.fps} fps · ${this.frameMs.toFixed(1)} ms (sim ${this.simMs.toFixed(1)} · render ${this.renderMs.toFixed(1)})${dpr !== 1 ? ` · dpr ${dpr} ¡debe ser 1!` : ''}`;
+        const aviso = dpr !== 1 ? ` · dpr ${dpr.toFixed(2)} (compensado; mejor Windows al 100%)` : '';
+        this.fpsEl.textContent = `${this.fps} fps · ${this.frameMs.toFixed(1)} ms (sim ${this.simMs.toFixed(1)} · render ${this.renderMs.toFixed(1)})${aviso}`;
       }
       this._frames = 0;
       this._fpsAccum = 0;

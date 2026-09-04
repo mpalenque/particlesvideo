@@ -56,11 +56,13 @@ export class ScenesPanel {
   renderStats() {
     const s = this.state.stats;
     if (!s) { this.statsEl.textContent = '—'; return; }
-    const dprBad = s.dpr !== 1;
+    // El dpr ya no es una falla: el canvas compensa la escala de pantalla. Se avisa igual
+    // porque con una escala que no sea múltiplo entero puede correrse medio píxel.
+    const dprRaro = s.dpr !== 1;
     this.statsEl.innerHTML =
       `${s.fps} fps · ${s.ms} ms\n` +
       `partículas ${s.particles.toLocaleString('es')}\n` +
-      `<span class="${dprBad ? 'bad' : ''}">dpr ${s.dpr}${dprBad ? ' (debe ser 1)' : ''}</span>`;
+      `<span class="${dprRaro ? 'warn' : ''}">dpr ${dprRaro ? `${s.dpr.toFixed(2)} (compensado)` : s.dpr}</span>`;
   }
 
   get transition() { return Number(this.transitionEl.value) || 0; }

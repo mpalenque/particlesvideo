@@ -29,6 +29,13 @@ export async function createRenderer() {
   const apply = () => fitStage(stageEl, renderer.domElement, view.mode);
   apply();
   window.addEventListener('resize', apply);
+  // Mover la ventana a un monitor con otra escala cambia el dpr sin disparar `resize`.
+  // Esta media query se reevalúa exactamente cuando el dpr deja de valer lo que valía.
+  const seguirDpr = () => {
+    matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      .addEventListener('change', () => { apply(); seguirDpr(); }, { once: true });
+  };
+  seguirDpr();
 
   // Se deja el modo 'fit' accesible por si hace falta ver el cuadro completo en una
   // ventana chica durante el desarrollo, pero el default y el del show es 'native'.
@@ -43,13 +50,24 @@ export async function createRenderer() {
 
 // Se ajusta el tamaño CSS del canvas (no un transform): así el navegador lo reescala
 // con filtrado, en vez de con el muestreo duro que deja los bordes escalonados.
+//
+// El tamaño CSS se divide por el devicePixelRatio. El buffer de dibujo siempre mide
+// 2688 × 1008 píxeles REALES, pero `style.width` está en píxeles CSS, que solo son lo mismo
+// con la escala de pantalla de Windows en 100%. Con la escala en 130% (dpr 1.3) poner
+// `width: 2688px` hacía que el navegador estirara el cuadro a 3494 píxeles físicos: todo
+// borroso, las líneas de 1 px del 2D deshechas, y encima el cuadro más ancho que el panel de
+// 2688 así que ni siquiera entraba entero. Dividiendo, 2688/1.3 = 2068 px CSS × 1.3 = 2688
+// físicos: uno a uno de nuevo, sin depender de cómo esté configurada la máquina.
 function fitStage(stageEl, canvas, mode) {
+  const dpr = window.devicePixelRatio || 1;
   if (mode === 'native') {
-    canvas.style.width = `${STAGE.width}px`;
-    canvas.style.height = `${STAGE.height}px`;
+    const w = STAGE.width / dpr;
+    const h = STAGE.height / dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     // Centrado en el medio del cuadro; lo que no entra queda fuera de la ventana.
-    stageEl.style.left = `${Math.round((window.innerWidth - STAGE.width) / 2)}px`;
-    stageEl.style.top = `${Math.round((window.innerHeight - STAGE.height) / 2)}px`;
+    stageEl.style.left = `${Math.round((window.innerWidth - w) / 2)}px`;
+    stageEl.style.top = `${Math.round((window.innerHeight - h) / 2)}px`;
     return;
   }
   const scale = Math.min(window.innerWidth / STAGE.width, window.innerHeight / STAGE.height);

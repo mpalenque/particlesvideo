@@ -437,3 +437,30 @@ es el margen por encima del borde de pantalla).
 descarte por default cambiado, y que un ajuste vigente siga sobreviviendo a la recarga. Es el
 complemento de `smoke-persist.mjs`, que prueba lo contrario (que un ajuste del editor **sí**
 sobreviva).
+
+## El cuadro sale 1:1 aunque Windows no esté al 100%
+
+El overlay de fps avisaba `dpr 1.3 ¡debe ser 1!` y no había nada que hacer salvo ir a cambiar la
+escala de Windows a mano. Ahora se compensa solo.
+
+**Qué es el dpr**: `window.devicePixelRatio`, cuántos píxeles físicos usa el navegador por cada
+píxel CSS. Con la escala de pantalla de Windows en 130%, el dpr vale 1.3.
+
+**Por qué rompía**: el buffer de dibujo siempre mide 2688 × 1008 píxeles reales, pero
+`canvas.style.width` está en píxeles **CSS**, que solo son lo mismo con la escala al 100%. Con
+dpr 1.3, `width: 2688px` hacía que el navegador estirara el cuadro a **3494 píxeles físicos**:
+todo borroso, las líneas de 1 px de la capa 2D deshechas, y encima el cuadro más ancho que el
+panel de 2688 así que ni siquiera entraba entero — se veía como el 77% del cuadro, ampliado.
+
+**El arreglo** (`fitStage`, modo `native`): el tamaño CSS se divide por el dpr. 2688 / 1.3 =
+2068 px CSS × 1.3 = 2688 físicos, uno a uno de nuevo. Además hay una media query
+`(resolution: Ndppx)` que se reevalúa cuando el dpr cambia, porque mover la ventana a un monitor
+con otra escala **no** dispara `resize`.
+
+`tools/smoke-dpr.mjs` lo comprueba con escala 100, 130, 150 y 200%: en las cuatro, el buffer y
+los píxeles físicos en pantalla dan 2688 × 1008 exacto. Medido además sobre la grilla fina de la
+escena 4: las líneas siguen midiendo **1 píxel físico** con escala 130%, igual que al 100%.
+
+El aviso del overlay y el del editor se quedan (ahora dicen "compensado"): con una escala que no
+sea múltiplo entero el navegador todavía puede correr medio píxel al redondear, así que para el
+show sigue siendo mejor tener el monitor de la LED al 100%. Pero ya no es algo que rompa nada.
