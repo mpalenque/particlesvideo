@@ -115,7 +115,9 @@ export const SCENES = [
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.revealDist': 60,
       'box.visible': 0, 'box.enabled': false, 'box.preset': 'center',
       'box.width': 2.6, 'box.depth': 2.4,
-      'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.3,
+      // Un poco de turbulencia deshilacha el borde del chorro: sin ella el emisor rectangular
+      // se lee como un prisma de cantos rectos y se nota que es una caja.
+      'particles.opacity': 1, 'particles.baseColor': '#0000FF', 'particles.turbulence': 0.5,
       'particles.flowY': 1.2, 'particles.wrapMode': 'vertical',
       // Rozamiento: con flujo constante y sin rozamiento la velocidad crece sin techo y todo
       // termina en blanco. Con rozamiento el chorro llega a una velocidad estable (flujo/roce)

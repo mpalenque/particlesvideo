@@ -59,7 +59,7 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.whiteJitter', type: 'float', min: 0, max: 2, default: 0.7, label: 'Dispersión del blanco', group: 'particles' });
     params.define({ id: 'particles.roughness', type: 'float', min: 0, max: 1, default: 0.55, label: 'Rugosidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.metalness', type: 'float', min: 0, max: 1, default: 0, label: 'Metalicidad', group: 'particles', sceneReset: false });
-    params.define({ id: 'particles.emissive', type: 'float', min: 0, max: 2, default: 0.15, label: 'Emisión propia', group: 'particles' });
+    params.define({ id: 'particles.emissive', type: 'float', min: 0, max: 2, default: 0.08, label: 'Emisión propia', group: 'particles' });
     params.define({ id: 'particles.speedSmooth', type: 'float', min: 0.5, max: 40, default: 6, label: 'Suavizado de velocidad (1/s)', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.turnRate', type: 'float', min: 0.5, max: 40, default: 8, label: 'Giro del palito (1/s)', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.flicker', type: 'float', min: 0, max: 1, default: 0, label: 'Titileo', group: 'particles' });

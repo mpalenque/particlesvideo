@@ -1,6 +1,6 @@
 # Referencia MIDI / OSC — Visuales LED
 
-Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
+Generado 3/9/2026, 08:25:22 desde el registro de parámetros.
 
 ## Escenas
 
@@ -28,7 +28,7 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | 20 | Partículas libres |  |
 | 21 | Torbellino |  |
 | 22 | Torbellino en la caja |  |
-| 23 | Torbellino + caja titilando |  |
+| 23 | A punto de explotar |  |
 
 ## Parámetros y acciones
 
@@ -49,6 +49,24 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `bloom.radius` | Bloom radio | float | 0 .. 1 | `/p/bloom/radius` | `/pn/bloom/radius` |  |
 | `bloom.threshold` | Bloom umbral | float | 0 .. 1 | `/p/bloom/threshold` | `/pn/bloom/threshold` |  |
 
+### ao
+
+| id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
+|---|---|---|---|---|---|---|
+| `ao.enabled` | Ambient occlusion | bool | false \| true | `/p/ao/enabled` | `/pn/ao/enabled` |  |
+| `ao.amount` | Intensidad AO | float | 0 .. 1 | `/p/ao/amount` | `/pn/ao/amount` |  |
+| `ao.distance` | Radio AO (m) | float | 0.01 .. 1 | `/p/ao/distance` | `/pn/ao/distance` |  |
+| `ao.thickness` | Grosor AO | float | 0.05 .. 4 | `/p/ao/thickness` | `/pn/ao/thickness` |  |
+| `ao.contrast` | Contraste AO | float | 0.25 .. 4 | `/p/ao/contrast` | `/pn/ao/contrast` |  |
+| `ao.samples` | Muestras AO | int | 4 .. 32 | `/p/ao/samples` | `/pn/ao/samples` |  |
+| `ao.denoise` | Suavizado AO | float | 0 .. 12 | `/p/ao/denoise` | `/pn/ao/denoise` |  |
+
+### render
+
+| id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
+|---|---|---|---|---|---|---|
+| `render.msaa` | Antialiasing 3D (MSAA) | bool | false \| true | `/p/render/msaa` | `/pn/render/msaa` |  |
+
 ### scene
 
 | id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
@@ -67,6 +85,8 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `warning.scroll` | Scroll texto (px/s) | float | -200 .. 200 | `/p/warning/scroll` | `/pn/warning/scroll` |  |
 | `warning.pulseAttack` | Pulso ataque (s) | float | 0.1 .. 10 | `/p/warning/pulseAttack` | `/pn/warning/pulseAttack` |  |
 | `warning.pulseRelease` | Pulso caída (s) | float | 0.1 .. 10 | `/p/warning/pulseRelease` | `/pn/warning/pulseRelease` |  |
+| `warning.bgPulse` | Latido del fondo | float | 0 .. 1 | `/p/warning/bgPulse` | `/pn/warning/bgPulse` |  |
+| `warning.bgPulseRate` | Latido (Hz) | float | 0.05 .. 6 | `/p/warning/bgPulseRate` | `/pn/warning/bgPulseRate` |  |
 | `warning.pulse` | Pulso de fondo | acción |  | `/a/warning/pulse` |  |  |
 | `warning.bgOff` | Apagar fondo (1b) | acción |  | `/a/warning/bgOff` |  |  |
 | `warning.bgOn` | Prender fondo | acción |  | `/a/warning/bgOn` |  |  |
@@ -178,6 +198,20 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `camera.eyeY` | Ojo Y (m) | float | 0 .. 3 | `/p/camera/eyeY` | `/pn/camera/eyeY` |  |
 | `camera.eyeZ` | Ojo Z (m) | float | 1 .. 10 | `/p/camera/eyeZ` | `/pn/camera/eyeZ` |  |
 
+### light
+
+| id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
+|---|---|---|---|---|---|---|
+| `light.ambient` | Ambiente | float | 0 .. 3 | `/p/light/ambient` | `/pn/light/ambient` |  |
+| `light.ambientColor` | Color ambiente | color | hex #RRGGBB | `/p/light/ambientColor` | `/pn/light/ambientColor` |  |
+| `light.key` | Luz principal | float | 0 .. 10 | `/p/light/key` | `/pn/light/key` |  |
+| `light.keyColor` | Color principal | color | hex #RRGGBB | `/p/light/keyColor` | `/pn/light/keyColor` |  |
+| `light.keyX` | Principal X (m) | float | -8 .. 8 | `/p/light/keyX` | `/pn/light/keyX` |  |
+| `light.keyY` | Principal Y (m) | float | 0 .. 8 | `/p/light/keyY` | `/pn/light/keyY` |  |
+| `light.keyZ` | Principal Z (m) | float | -8 .. 8 | `/p/light/keyZ` | `/pn/light/keyZ` |  |
+| `light.fill` | Relleno | float | 0 .. 10 | `/p/light/fill` | `/pn/light/fill` |  |
+| `light.fillColor` | Color relleno | color | hex #RRGGBB | `/p/light/fillColor` | `/pn/light/fillColor` |  |
+
 ### floor
 
 | id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
@@ -188,10 +222,11 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `floor.dashLength` | Largo dash (m) | float | 0.05 .. 3 | `/p/floor/dashLength` | `/pn/floor/dashLength` |  |
 | `floor.dashPeriod` | Período dash (m) | float | 0.1 .. 6 | `/p/floor/dashPeriod` | `/pn/floor/dashPeriod` |  |
 | `floor.dashWidth` | Ancho dash (m) | float | 0.01 .. 0.5 | `/p/floor/dashWidth` | `/pn/floor/dashWidth` |  |
+| `floor.dashHeight` | Alto dash (m) | float | 0.002 .. 0.3 | `/p/floor/dashHeight` | `/pn/floor/dashHeight` |  |
 | `floor.scrollSpeed` | Avance (m/s) | float | -5 .. 5 | `/p/floor/scrollSpeed` | `/pn/floor/scrollSpeed` |  |
 | `floor.revealDuration` | Duración aparición (s) | float | 0.1 .. 20 | `/p/floor/revealDuration` | `/pn/floor/revealDuration` |  |
-| `floor.fadeFar` | Fade lejano (m) | float | 5 .. 60 | `/p/floor/fadeFar` | `/pn/floor/fadeFar` |  |
-| `floor.revealDist` | Alcance actual (m) | float | 0 .. 60 | `/p/floor/revealDist` | `/pn/floor/revealDist` |  |
+| `floor.fadeFar` | Alcance (m) | float | 5 .. 120 | `/p/floor/fadeFar` | `/pn/floor/fadeFar` |  |
+| `floor.revealDist` | Alcance actual (m) | float | 0 .. 120 | `/p/floor/revealDist` | `/pn/floor/revealDist` |  |
 | `floor.reveal` | Extender piso | acción |  | `/a/floor/reveal` |  |  |
 | `floor.hide` | Retraer piso | acción |  | `/a/floor/hide` |  |  |
 
@@ -213,6 +248,7 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `box.wallStiffness` | Rigidez pared | float | 0 .. 2 | `/p/box/wallStiffness` | `/pn/box/wallStiffness` |  |
 | `box.wallMaxPush` | Empuje máximo | float | 0 .. 5 | `/p/box/wallMaxPush` | `/pn/box/wallMaxPush` |  |
 | `box.hardClamp` | Clamp duro | bool | false \| true | `/p/box/hardClamp` | `/pn/box/hardClamp` |  |
+| `box.wallBounce` | Rebote en la pared | float | 0 .. 1 | `/p/box/wallBounce` | `/pn/box/wallBounce` |  |
 | `box.flicker` | Titileo | bool | false \| true | `/p/box/flicker` | `/pn/box/flicker` |  |
 | `box.flickerRate` | Titileo (Hz) | float | 0.5 .. 30 | `/p/box/flickerRate` | `/pn/box/flickerRate` |  |
 | `box.flickerDuty` | Titileo duty | float | 0 .. 1 | `/p/box/flickerDuty` | `/pn/box/flickerDuty` |  |
@@ -226,8 +262,9 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `redBlock.side` | Lado | enum | left \| right | `/p/redBlock/side` | `/pn/redBlock/side` |  |
 | `redBlock.x` | X (m) | float | 0 .. 6 | `/p/redBlock/x` | `/pn/redBlock/x` |  |
 | `redBlock.z` | Z (m) | float | -5 .. 0 | `/p/redBlock/z` | `/pn/redBlock/z` |  |
-| `redBlock.width` | Ancho (m) | float | 0.2 .. 6 | `/p/redBlock/width` | `/pn/redBlock/width` |  |
-| `redBlock.height` | Alto (m) | float | 0.2 .. 6 | `/p/redBlock/height` | `/pn/redBlock/height` |  |
+| `redBlock.width` | Ancho (m) | float | 0.2 .. 12 | `/p/redBlock/width` | `/pn/redBlock/width` |  |
+| `redBlock.height` | Alto (m) | float | 0.2 .. 16 | `/p/redBlock/height` | `/pn/redBlock/height` |  |
+| `redBlock.y` | Centro Y (m) | float | -4 .. 6 | `/p/redBlock/y` | `/pn/redBlock/y` |  |
 | `redBlock.yaw` | Giro (°) | float | -90 .. 90 | `/p/redBlock/yaw` | `/pn/redBlock/yaw` |  |
 | `redBlock.color` | Color | color | hex #RRGGBB | `/p/redBlock/color` | `/pn/redBlock/color` |  |
 | `redBlock.attract` | Atracción | float | 0 .. 10 | `/p/redBlock/attract` | `/pn/redBlock/attract` |  |
@@ -241,7 +278,9 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `debris.count` | Por impacto | int | 0 .. 300 | `/p/debris/count` | `/pn/debris/count` |  |
 | `debris.size` | Tamaño (m) | float | 0.01 .. 0.3 | `/p/debris/size` | `/pn/debris/size` |  |
 | `debris.speed` | Velocidad (m/s) | float | 0 .. 8 | `/p/debris/speed` | `/pn/debris/speed` |  |
-| `debris.lifetime` | Duración (s) | float | 0.2 .. 10 | `/p/debris/lifetime` | `/pn/debris/lifetime` |  |
+| `debris.lifetime` | Duración (s) | float | 0.1 .. 10 | `/p/debris/lifetime` | `/pn/debris/lifetime` |  |
+| `debris.fadeFraction` | Fracción de fade | float | 0.05 .. 1 | `/p/debris/fadeFraction` | `/pn/debris/fadeFraction` |  |
+| `debris.floorCollision` | Choca con el piso | bool | false \| true | `/p/debris/floorCollision` | `/pn/debris/floorCollision` |  |
 | `debris.gravity` | Gravedad | float | 0 .. 20 | `/p/debris/gravity` | `/pn/debris/gravity` |  |
 | `debris.bounce` | Rebote | float | 0 .. 1 | `/p/debris/bounce` | `/pn/debris/bounce` |  |
 | `debris.friction` | Fricción | float | 0 .. 1 | `/p/debris/friction` | `/pn/debris/friction` |  |
@@ -273,8 +312,8 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `particles.opacity` | Partículas | float | 0 .. 1 | `/p/particles/opacity` | `/pn/particles/opacity` |  |
 | `particles.count` | Cantidad | int | 4096 .. 524288 | `/p/particles/count` | `/pn/particles/count` |  |
 | `particles.baseColor` | Color base | color | hex #RRGGBB | `/p/particles/baseColor` | `/pn/particles/baseColor` |  |
-| `particles.whiteSpeedMin` | Blanco desde | float | 0 .. 5 | `/p/particles/whiteSpeedMin` | `/pn/particles/whiteSpeedMin` |  |
-| `particles.whiteSpeedMax` | Blanco hasta | float | 0 .. 10 | `/p/particles/whiteSpeedMax` | `/pn/particles/whiteSpeedMax` |  |
+| `particles.whiteSpeedMin` | Blanco desde | float | 0 .. 20 | `/p/particles/whiteSpeedMin` | `/pn/particles/whiteSpeedMin` |  |
+| `particles.whiteSpeedMax` | Blanco hasta | float | 0 .. 40 | `/p/particles/whiteSpeedMax` | `/pn/particles/whiteSpeedMax` |  |
 | `particles.size` | Tamaño | float | 0.5 .. 6 | `/p/particles/size` | `/pn/particles/size` |  |
 | `particles.length` | Largo | float | 0.02 .. 4 | `/p/particles/length` | `/pn/particles/length` |  |
 | `particles.speed` | Velocidad sim | float | 0 .. 2 | `/p/particles/speed` | `/pn/particles/speed` |  |
@@ -286,12 +325,25 @@ Generado 2/9/2026, 10:14:47 desde el registro de parámetros.
 | `particles.viscosity` | Viscosidad | float | 0.01 .. 0.4 | `/p/particles/viscosity` | `/pn/particles/viscosity` |  |
 | `particles.gravityY` | Gravedad Y | float | -1 .. 1 | `/p/particles/gravityY` | `/pn/particles/gravityY` |  |
 | `particles.bloom` | Bloom | float | 0 .. 1 | `/p/particles/bloom` | `/pn/particles/bloom` |  |
+| `particles.ageGrow` | Crecer con la edad (s) | float | 0.05 .. 6 | `/p/particles/ageGrow` | `/pn/particles/ageGrow` |  |
+| `particles.sizeJitter` | Variación de tamaño | float | 0 .. 1 | `/p/particles/sizeJitter` | `/pn/particles/sizeJitter` |  |
+| `particles.taper` | Punta (cola más fina) | float | 0 .. 0.95 | `/p/particles/taper` | `/pn/particles/taper` |  |
+| `particles.headTail` | Degradado cabeza/cola | float | 0 .. 1 | `/p/particles/headTail` | `/pn/particles/headTail` |  |
+| `particles.whiteJitter` | Dispersión del blanco | float | 0 .. 2 | `/p/particles/whiteJitter` | `/pn/particles/whiteJitter` |  |
+| `particles.roughness` | Rugosidad | float | 0 .. 1 | `/p/particles/roughness` | `/pn/particles/roughness` |  |
+| `particles.metalness` | Metalicidad | float | 0 .. 1 | `/p/particles/metalness` | `/pn/particles/metalness` |  |
+| `particles.emissive` | Emisión propia | float | 0 .. 2 | `/p/particles/emissive` | `/pn/particles/emissive` |  |
+| `particles.speedSmooth` | Suavizado de velocidad (1/s) | float | 0.5 .. 40 | `/p/particles/speedSmooth` | `/pn/particles/speedSmooth` |  |
+| `particles.turnRate` | Giro del palito (1/s) | float | 0.5 .. 40 | `/p/particles/turnRate` | `/pn/particles/turnRate` |  |
+| `particles.flicker` | Titileo | float | 0 .. 1 | `/p/particles/flicker` | `/pn/particles/flicker` |  |
+| `particles.flickerRate` | Titileo (Hz) | float | 0.1 .. 40 | `/p/particles/flickerRate` | `/pn/particles/flickerRate` |  |
 | `particles.flowX` | Flujo X | float | -3 .. 3 | `/p/particles/flowX` | `/pn/particles/flowX` |  |
 | `particles.flowY` | Flujo Y | float | -3 .. 3 | `/p/particles/flowY` | `/pn/particles/flowY` |  |
 | `particles.flowZ` | Flujo Z | float | -3 .. 3 | `/p/particles/flowZ` | `/pn/particles/flowZ` |  |
 | `particles.drag` | Rozamiento | float | 0 .. 1 | `/p/particles/drag` | `/pn/particles/drag` |  |
 | `particles.wrapMode` | Emisión continua | enum | off \| vertical | `/p/particles/wrapMode` | `/pn/particles/wrapMode` |  |
-| `particles.wrapTop` | Tope wrap (m) | float | 0 .. 4 | `/p/particles/wrapTop` | `/pn/particles/wrapTop` |  |
+| `particles.wrapTop` | Margen fuera de cuadro (m) | float | 0 .. 4 | `/p/particles/wrapTop` | `/pn/particles/wrapTop` |  |
+| `particles.emitSpread` | Alto del emisor (m) | float | 0 .. 2 | `/p/particles/emitSpread` | `/pn/particles/emitSpread` |  |
 | `particles.kickAmount` | Golpe | float | 0 .. 3 | `/p/particles/kickAmount` | `/pn/particles/kickAmount` |  |
 | `particles.kickDecay` | Caída del golpe (s) | float | 0.05 .. 3 | `/p/particles/kickDecay` | `/pn/particles/kickDecay` |  |
 | `particles.resetInBox` | Reubicar en la caja | acción |  | `/a/particles/resetInBox` |  |  |

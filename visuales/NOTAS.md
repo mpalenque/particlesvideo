@@ -320,3 +320,102 @@ a 60 fps.
   `line.x` y `floor.revealDist`, que son estado vivo y no configuración.
   Botón **"Restaurar ajustes de fábrica"** en el editor. Verificado con `tools/smoke-persist.mjs`:
   ajustar → recargar → siguen; restaurar → vuelven los valores de fábrica.
+
+## Palitos: tamaño, dirección, oclusión y flujo de la escena 12
+
+Cuatro pedidos de Manuel, con el diagnóstico de por qué pasaba cada cosa.
+
+### 1. "Falta detalle, son demasiado chicos"
+
+Los palitos medían 3.3 mm × 2.5 cm. Con 336 px/m en la LED eso es **1.4 px de ancho por 10 de
+largo**: menos de un pixel de sombreado útil, así que no se veía ni el volumen del palito ni la
+oclusión entre palitos — la masa quedaba como ruido plano de un solo color.
+
+Ahora miden **9 mm × 8 cm (≈ 3 × 27 px)** y hay la mitad de partículas
+(`BASE_THICKNESS_M` 0.00825 → 0.0140, `BASE_LENGTH_M` 0.0625 → 0.125, `particles.count`
+262144 → 131072, y los presets de `master.quality` bajaron un escalón cada uno). Menos y más
+grandes: con las cantidades viejas y este tamaño la caja se tapaba sola y volvía a verse plana.
+
+**La iluminación no cambió de nivel, cambió de relación**: `light.ambient` 0.55 → 0.32 y
+`light.fill` 1.1 → 0.8, con la principal quieta en 3.2. Con el ambiente alto la cara en sombra
+de cada palito nunca bajaba de medio tono, así que tanto el degradado como el AO quedaban
+aplastados. `particles.emissive` 0.15 → 0.08 por lo mismo.
+
+### 2. "Se note su dirección"
+
+Tres arreglos, uno de bug y dos de diseño:
+
+- **Bug del `lookAt`**: `calcLookAtMatrix` usaba un eje de referencia fijo `(0,0,1)`, así que
+  para una partícula que viaja **hacia la cámara** el `cross` daba el vector nulo y la
+  orientación salía basura. Y con `direction` en cero (partícula frenada) `normalize` daba NaN.
+  Ahora el eje de referencia se elige según la dirección y hay guarda para el vector nulo.
+- **Bug del heading**: `direction` se guardaba como `mix(direction, vel, 0.1)`, o sea un vector
+  cuyo módulo *era* la velocidad. Con la partícula casi quieta quedaba en ~0 y el palito
+  temblaba sin rumbo. Ahora se guarda **siempre unitario**, el suavizado es por segundo real
+  (`particles.turnRate`) y no por frame, y ante velocidad ~0 conserva el último rumbo.
+- **Forma de cometa**: `particles.taper` afina la cola y `particles.headTail` la apaga, así el
+  palito tiene punta adelante. Es lo que hace que a 3 px de ancho se lea para dónde va.
+
+### 3. "El flujo azul tiene que salirse de pantalla y seguir emitiendo"
+
+La escena 12 tenía `box.enabled: true` con la caja invisible: el chorro chocaba contra el techo
+de la caja y se apelmazaba en un hongo **dentro del cuadro**. Ahora `box.enabled: false` y la
+caja queda solo como **encuadre del emisor** (`box.width` / `box.depth` son el ancho y el fondo
+del chorro, aunque el límite esté apagado).
+
+Sacar la caja sola no alcanzaba: el techo del dominio estaba en 3.5 m, apenas por encima de la
+pantalla, y las partículas chocaban igual contra la pared del dominio. Dos cambios más:
+
+- **El dominio sube a 7 m** (`STAGE.sim.max`, grilla 90 × 75 × 60). Hay lugar de sobra arriba
+  del cuadro para que el chorro se vaya antes de reciclarse.
+- **El techo del reciclado no es un plano horizontal**: es el **borde superior del encuadre**,
+  que en perspectiva sube con la profundidad (a 2 m de fondo hay que llegar más alto para
+  salirse del cuadro). La CPU manda la recta `y = wrapA + wrapB·z` en unidades de grilla
+  (`_updateWrapLine`, sale del ojo y de `STAGE.physical.heightM`) y el kernel la evalúa por
+  partícula. `particles.wrapTop` dejó de ser un techo absoluto: ahora es **cuántos metros por
+  encima del borde de pantalla** se recicla.
+
+Además la escena lleva `particles.drag: 0.22`. Sin rozamiento el flujo constante acelera sin
+techo y termina todo en blanco; con rozamiento el chorro llega a una velocidad estable
+(flujo/roce) y se mantiene azul parejo. Verificado a los 8 s y a los 25 s: misma densidad y
+misma altura, sin acumulación.
+
+### 4. "El pasaje a blanco se hace en chunks"
+
+Dos causas, las dos arregladas:
+
+- La velocidad sale de **interpolar la grilla**, así que todas las partículas de una misma celda
+  comparten valor: el color quedaba cuantizado al tamaño de la celda y saltaba de golpe. Ahora
+  hay un campo `speedSmooth` en el struct de la partícula (promedio exponencial,
+  `particles.speedSmooth`) y es ese el que colorea.
+- Aunque el valor sea suave, si **todas** las partículas usan el mismo umbral una zona de
+  velocidad parecida se da vuelta entera de un frame para el otro. `particles.whiteJitter`
+  corre el umbral de cada partícula un poco al azar, así la zona **se disuelve** palito por
+  palito. Comparado A/B: con jitter en 0 el borde rojo/blanco es un blob macizo; con 0.7 hay
+  una franja mezclada de decenas de píxeles.
+
+El campo nuevo entra en el padding que ya tenía el struct: sigue midiendo 28 floats, no ocupa
+un byte más.
+
+### AO de verdad
+
+El radio del GTAO estaba en **0.35 m** para palitos de 9 mm que se tocan a pocos centímetros:
+medía la silueta de toda la nube y no veía nada del hueco entre palito y palito. Bajó a
+**0.10 m** (probado también 0.05 y 0.25; 0.10 es el que mejor separa sin perder la forma).
+
+Con un radio chico el GTAO sale **muy ruidoso** (rota sus muestras con una textura de ruido), y
+ahí subir la calidad se ve como suciedad. Se agregó el **`denoise` bilateral** de three
+(`DenoiseNode`, guiado por profundidad y normal) después del AO: es lo que convierte el
+granulado en sombra limpia. Params nuevos: `ao.contrast`, `ao.samples`, `ao.denoise`.
+
+También se le dio atributo `normal` a la `EdgesGeometry` de la caja: el MRT le pide
+`transformedNormalView` a todo lo del pase 3D y sin el atributo three avisaba por consola y el
+buffer de normales quedaba con basura justo donde van las aristas — que es lo que después lee
+el GTAO.
+
+Costo: **5–6 ms/frame** en la escena 13 (contra 6 ms antes), o sea el denoise se paga solo con
+las partículas que sacamos. Las 23 escenas siguen a 60 fps.
+
+**Ojo con los ajustes guardados**: `Settings` persiste lo que se toca en el editor pisando el
+*default*. Si en alguna sesión anterior se movieron `ao.*` o `light.*` a mano, esos valores le
+ganan a los defaults nuevos — hay que borrar los ajustes del editor para ver los de fábrica.

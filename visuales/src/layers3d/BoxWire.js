@@ -40,7 +40,14 @@ export class BoxWire {
     const material = new THREE.LineBasicNodeMaterial({ transparent: true, depthWrite: false });
     material.colorNode = this.uColor;
     material.opacityNode = this.uOpacity;
-    this.lines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), material);
+    // El MRT del compositor pide `transformedNormalView` a TODO lo que se dibuja en el pase 3D,
+    // y EdgesGeometry no trae atributo `normal`: sin esto three avisa por consola y el buffer de
+    // normales queda con basura justo donde van las aristas, que es lo que después lee el GTAO.
+    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    const normals = new Float32Array(edges.attributes.position.count * 3);
+    for (let i = 2; i < normals.length; i += 3) normals[i] = 1;   // (0, 0, 1) para todos
+    edges.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    this.lines = new THREE.LineSegments(edges, material);
     this.lines.frustumCulled = false;
     scene.add(this.lines);
   }
