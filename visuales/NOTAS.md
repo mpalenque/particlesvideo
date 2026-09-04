@@ -416,6 +416,24 @@ el GTAO.
 Costo: **5–6 ms/frame** en la escena 13 (contra 6 ms antes), o sea el denoise se paga solo con
 las partículas que sacamos. Las 23 escenas siguen a 60 fps.
 
-**Ojo con los ajustes guardados**: `Settings` persiste lo que se toca en el editor pisando el
-*default*. Si en alguna sesión anterior se movieron `ao.*` o `light.*` a mano, esos valores le
-ganan a los defaults nuevos — hay que borrar los ajustes del editor para ver los de fábrica.
+### Los ajustes guardados que quedan viejos se tiran solos
+
+`Settings` persiste lo que se toca en el editor **pisando el default**, que es lo que hace que el
+ajuste sobreviva a los cambios de escena. El efecto colateral: cambiar un default en el código no
+tenía ningún efecto en la máquina donde ese param se había movido alguna vez a mano — el valor
+guardado le ganaba en silencio y había que acordarse de ir a borrar los ajustes. Nadie se acuerda
+de eso a las tres de la mañana antes de un show.
+
+Ahora **cada ajuste guarda contra qué valor de fábrica se hizo** (`{ v, d }` en vez de un valor
+suelto). Si el código mueve ese valor de fábrica, el ajuste guardado se descarta solo al arrancar
+y lo dice por consola. Todo lo demás que Manuel haya tocado sigue vivo.
+
+Para el formato viejo (una tabla plana, sin saber contra qué default se guardó) hay una lista de
+params invalidados a mano: los que cambiaron de default al recalibrar los palitos, más
+`particles.wrapTop`, que además cambió de **significado** (era un techo absoluto en metros, ahora
+es el margen por encima del borde de pantalla).
+
+`tools/smoke-settings-viejos.mjs` lo cubre: 13 comprobaciones entre migración del formato viejo,
+descarte por default cambiado, y que un ajuste vigente siga sobreviviendo a la recarga. Es el
+complemento de `smoke-persist.mjs`, que prueba lo contrario (que un ajuste del editor **sí**
+sobreviva).
