@@ -1,8 +1,24 @@
 ﻿# Integración de Radiance desde la escena 24
 
+## Decisión vigente — reemplaza la asignación de la primera integración
+
+**2026-09-06: escena 24 = previa negra con sólo una línea blanca; timeline 0 detenido, física vacía/preparada. Escena 25 = PLAY del timeline completo desde cero. Audio siempre desde Ableton: la web nunca reproduce el WAV.**
+
+Las notas existentes del canal 10 son 24 para previa y 25 para PLAY. Las notas repetidas no reinician; `fluids.restart` es explícito. Entrar en 24 o 25 desactiva el loop de ensayo. El motor live queda conservado sin escena asignada; **26–29 siguen libres**. El WAV queda para waveform/referencia y el reloj visual arranca con el cue, sin seguimiento automático de posición externa.
+
+**Estado actual: implementado y funcionalmente verificado, con 217 tests, TypeScript y build aprobados.** Flujo, MIDI, previa blanca/vacía, ausencia de audio web, editor y subruta de producción aprobados. El rendimiento varió: primera producción con 45 intervalos >20 ms y máximo 83,6 ms; repetición sin cambios a ~60 FPS y máximo 17,5 ms. No está cumplida una garantía permanente de 50 FPS ni de 50 Hz físicos. [Validación nueva](VALIDACION-CUES-24-25.md).
+
+La documentación canónica está en [contexto actual](../CONTEXTO-ACTUAL.md), [sistemas](../ARQUITECTURA-Y-SISTEMAS.md) y [configuración](../CONFIGURACION.md). El [plan original de Fluids](../origen-radiance/INDICE.md) está copiado y verificado por SHA-256.
+
+**El registro de abajo conserva el plan y los resultados de la primera integración.** Sus indicaciones «24 PLAY / 25 live», audio local o armado de reproducción están reemplazadas. Sus pruebas no validan la nueva asignación; consultar el contexto actual para resultados de esta entrega.
+
+---
+
+## Registro histórico de la primera integración
+
 Fecha: 2026-09-06. Estado: **integración funcional, presentación de producción y preview verificados; presupuesto estricto de física no cumplido durante toda la pieza**.
 
-[Guía de operación: armado de audio, editor, controles live, respaldo y resultados](OPERACION.md).
+[Guía de operación vigente: previa 24, PLAY 25, audio externo y editor](OPERACION.md).
 
 El contenido principal a integrar es **Fluids, el show con timeline propio**, dentro de la salida y los controles de `particlesvideo/visuales`. Se conserva el proyecto Radiance completo para poder incorporar después Tres Masas, Depth Sorter, Bloques y Voronoi. Las escenas 1–23 deben conservar su funcionamiento y aspecto, incluidos los últimos ajustes de piso, rayos y torbellino.
 

@@ -15,7 +15,7 @@ export function metrics(samples) {
     worst: values.at(-1), over20ms: values.filter(v => v > 20).length };
 }
 
-export async function browser({ directory = root, production = false, port = 5191, base = '/', original = false, mount } = {}) {
+export async function browser({ directory = root, production = false, port = 5191, base = '/', original = false, mount, initScript } = {}) {
   const options = { root: directory, server: { host: '127.0.0.1', port, strictPort: true, hmr: false },
     preview: { host: '127.0.0.1', port, strictPort: true },
     ...(mount ? { base: mount } : {}),
@@ -81,6 +81,7 @@ export async function browser({ directory = root, production = false, port = 519
     };
     await send('Runtime.enable');
     await send('Page.enable');
+    if (initScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
     await send('Emulation.setDeviceMetricsOverride', { width: 2688, height: 1008, deviceScaleFactor: 1, mobile: false });
     const url = `http://127.0.0.1:${port}${base}`;
     await send('Browser.grantPermissions', { origin: new URL(url).origin, permissions: ['midi', 'midiSysex'] });

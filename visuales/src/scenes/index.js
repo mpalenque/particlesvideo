@@ -727,9 +727,10 @@ export const SCENES = [
 
   // RadianceController prepara el motor antes de confirmar 24/25. Los presets vacíos apagan
   // las capas de Parte 1; Engine entrega los frames al único runtime Fluid activo.
-  // El timeline entero pertenece a la 24. Las escenas 26–29 siguen libres con su MIDI existente.
-  { id: '24', name: 'Fluids · timeline', transition: 0, params: {}, mainAction: 'fluids.play' },
-  { id: '25', name: 'Fluids · MIDI', transition: 0, params: {}, mainAction: 'fluids.live.burst' },
+  // 24 espera con la línea blanca; 25 dispara la secuencia y Ableton reproduce el audio.
+  // Las escenas 26–29 siguen libres con su MIDI existente.
+  { id: '24', name: 'Fluids · previa', transition: 0, params: {}, mainAction: 'fluids.play' },
+  { id: '25', name: 'Fluids · secuencia', transition: 0, params: {}, mainAction: 'fluids.play' },
   ...Array.from({ length: 4 }, (_, i) => ({
     id: String(26 + i), name: `Libre ${i + 3}`, transition: 1.0, params: {},
   })),

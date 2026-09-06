@@ -2,7 +2,16 @@
 
 Qué se hizo distinto al plan y por qué, y problemas conocidos. Corto.
 
-## Integración Radiance — 2026-09-06
+## Fluids: nueva asignación y contexto compartido — 2026-09-06
+
+- Decisión que reemplaza la integración anterior: **24 previa negra/sólo línea blanca, tiempo 0 detenido y población vacía; 25 PLAY completo desde cero; audio siempre desde Ableton, nunca desde la web**. Notas 24/25 ch10 sin doble PLAY ni reinicio por repeticiones. Live se conserva sin asignar 26; 26–29 siguen libres.
+- `fluids.arm` ahora prepara; `fluids.standby` selecciona 24; `fluids.play` selecciona/continúa 25; `fluids.restart` reinicia 25. El WAV sólo se decodifica offline como referencia. Mapeos v11 añaden sc24/sc25 si faltan, preservando filas personalizadas. Entrar en 24 o 25 desactiva el loop de ensayo. La previa deja el arranque listo: 24→25 inicia sin reset ni espera del Worker en el cue.
+- Contexto canónico en [docs/CONTEXTO-ACTUAL.md](docs/CONTEXTO-ACTUAL.md), arquitectura y configuración al lado; raíz `CONTEXTO.md`, `AGENTS.md`, `CLAUDE.md` y `PLAN.md` apuntan allí. Los planes anteriores quedan identificados como históricos.
+- El plan original de Fluids y cómo funciona estaban en la copia completa de Radiance. Se preservaron además seis documentos/avisos byte por byte en [docs/origen-radiance](docs/origen-radiance/INDICE.md), con manifiesto SHA-256 contra `heidi` y el sibling.
+- Código nuevo: 217 tests, TypeScript y build aprobados. Flujo 24/25, MIDI, ausencia de audio web, editor y recursos/cues bajo `/show/` aprobados. Previa blanca exacta de 320×8 px, 2552 píxeles iluminados y ninguno coloreado en el fixture.
+- Evidencia GPU nueva bajo `radiance-check/cues-24-25`, separada de la anterior: primera producción con 45 intervalos >20 ms y máximo 83,6 ms; repetición sin cambios de código con máximo 17,5 ms y ninguno >20 ms. Último DEV, incluyendo loop desactivado al entrar: 480 frames a ~60 FPS y máximo 17,8 ms. Editor: 427 frames, máximo 17,7 ms y ninguno >20 ms. Se observó carga de otras aplicaciones después del ensayo problemático, sin aislar su causalidad. No hay garantía permanente de rendimiento; [informe actual](docs/integracion-radiance/VALIDACION-CUES-24-25.md).
+
+## Primera integración Radiance — 2026-09-06 (histórico, asignación reemplazada)
 
 - Implementadas 24 = timeline Fluids completo y 25 = el mismo solver/render con controles live; 26–29 reservadas. Se mantienen los mapeos de escena del canal 10 y `rays.width = 0.014` m. No se escribió una coreografía MIDI para la 25.
 - El runtime vive en `vendor/radiance`, con dependencias propias; `npm ci` ejecuta su instalación desde lockfile mediante `postinstall`. Un solo Engine decide qué motor trabaja. La transferencia 24→25 conserva población y drena el Worker antes de quitar director, geometría y gestos; entrar directamente en 25 comienza vacío.

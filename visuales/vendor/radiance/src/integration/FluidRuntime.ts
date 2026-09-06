@@ -38,7 +38,7 @@ const mix = (a: number, b: number, t: number) => a + (b - a) * t;
  */
 export class FluidRuntime {
   canvas: HTMLCanvasElement | null = null;
-  mode: 'idle' | 'timeline' | 'live' = 'idle';
+  mode: 'idle' | 'standby' | 'timeline' | 'live' = 'idle';
   private solver: KotFluidWorkerClient | null = null;
   private renderer: ParticleRenderer | null = null;
   private geometry: TresMasasGeometry | null = null;
@@ -64,6 +64,7 @@ export class FluidRuntime {
   private warning: string | null = null;
   private frameCount = 0;
   private frozen = false;
+  private standbyPrepared = false;
   private readonly quality: FluidRendererQuality;
 
   constructor({ quality = 'high' }: { quality?: FluidRendererQuality } = {}) {
@@ -130,9 +131,32 @@ export class FluidRuntime {
     if (this.document === doc) return;
     this.document = doc;
     this.director?.setDoc(doc);
+    if (this.mode === 'standby' && this.standbyPrepared) this.prepareStandbyVisual();
   }
 
   async enterTimeline(doc?: ShowDoc): Promise<void> {
+    await this.prepareTimeline('timeline', doc);
+  }
+
+  /** Scene 24: an empty, stationary field and the initial white line only. */
+  async enterStandby(doc?: ShowDoc): Promise<void> {
+    await this.prepareTimeline('standby', doc);
+  }
+
+  /** Scene 25's cue has no worker round trip or renderer/cache reset. */
+  startTimeline(): boolean {
+    if (this.disposed || this.mode !== 'standby' || !this.standbyPrepared || !this.director) return false;
+    this.mode = 'timeline';
+    this.standbyPrepared = false;
+    this.clearInput();
+    this.suspended = false;
+    this.frozen = false;
+    this.publishStats();
+    return true;
+  }
+
+  private async prepareTimeline(mode: 'standby' | 'timeline', doc?: ShowDoc): Promise<void> {
+    this.standbyPrepared = false;
     if (doc) this.setDocument(doc);
     if (!this.document) throw new Error('The Fluids timeline document has not loaded.');
     const generation = ++this.generation;
@@ -144,7 +168,7 @@ export class FluidRuntime {
     this.director = new FluidsShowDirector();
     this.director.setDoc(this.document);
     this.director.seek(0);
-    this.mode = 'timeline';
+    this.mode = mode;
     this.physicsElapsed = 0.05;
     this.massElapsed = 0;
     this.massScale = 1;
@@ -157,12 +181,47 @@ export class FluidRuntime {
     this.renderer!.setOverlay(this.geometry);
     this.lastStatus = null;
     this.frozen = false;
+    if (mode === 'standby') {
+      this.prepareStandbyVisual();
+      this.standbyPrepared = true;
+    }
     this.suspended = false;
+  }
+
+  private prepareStandbyVisual(): void {
+    if (!this.document || !this.renderer || !this.geometry) return;
+    // Sample only the original blade geometry at zero. A separate visual
+    // document guarantees that no timeline event/gesture runs or consumes its
+    // first trigger while the real director waits for the next MIDI cue.
+    const visualDoc: ShowDoc = {
+      ...this.document,
+      events: [],
+      gestures: [],
+      curves: { ...this.document.curves,
+        lineEmit: { keys: [{ t: 0, v: 1, shape: 'hold' }] },
+        lineBreak: { keys: [{ t: 0, v: 0, shape: 'hold' }] },
+      },
+    };
+    const visual = new FluidsShowDirector();
+    visual.setDoc(visualDoc);
+    const out = visual.update({ time: 0, dt: 1 / 60, playing: false,
+      aspect: this.width / this.height, particleCount: 0 });
+    // uGain affects only the HRC source shader. The original white blade's
+    // visible face keeps its full brightness, but it injects no diffuse light
+    // into the display field while waiting. TimelineFrame restores gain 1.
+    this.geometry.setGain(0);
+    this.geometry.setInstances(out.geometry, this.width, this.height);
+    this.renderer.setOverlay(this.geometry);
+    this.lastRender = { ...out.render, blackOutput: 0, backgroundBlack: 1,
+      radiance: 0, radianceExposure: 0 };
+    this.lastStatus = null;
+    this.publishStats();
   }
 
   async enterLive({ preserve = false }: { preserve?: boolean } = {}): Promise<void> {
     const generation = ++this.generation;
     const keepParticles = preserve && this.mode === 'timeline';
+    this.standbyPrepared = false;
     this.suspended = true;
     this.clearInput();
     const solver = this.requireSolver();
@@ -196,7 +255,11 @@ export class FluidRuntime {
     if (frozen && this.mode === 'timeline' && this.frozen) return;
     const step = clamp(dt, 0.001, 0.1);
     try {
-      if (this.mode === 'timeline') this.timelineFrame(now, step, time, playing, frozen);
+      if (this.mode === 'standby') {
+        // Redraw the cached line for output/preview; neither timeline nor
+        // interpolation, interactions or solver steps advance in standby.
+        this.renderer.render(this.solver, this.lastRender);
+      } else if (this.mode === 'timeline') this.timelineFrame(now, step, time, playing, frozen);
       else this.liveFrame(now, step, live);
       this.warning = this.solver.error;
       this.frameCount += 1;
@@ -316,7 +379,7 @@ export class FluidRuntime {
   }
 
   setGesture(gesture: FluidsLiveGesture | null): void {
-    this.gesture = this.suspended ? null : gesture;
+    this.gesture = this.suspended || this.mode === 'standby' ? null : gesture;
   }
 
   private applyGesture(dt: number): void {
@@ -343,6 +406,7 @@ export class FluidRuntime {
 
   reset(): void {
     this.clearInput();
+    if (this.mode === 'standby') return;
     if (this.mode === 'timeline') this.director?.requestReset();
     else {
       this.solver?.reset({ initialParticlesByMaterial: [0, 0, 0, 0] });
@@ -366,12 +430,14 @@ export class FluidRuntime {
     this.dpr = clamp(dpr, 0.5, 2);
     this.renderer?.resize(this.width, this.height, this.dpr);
     this.solver?.resize(this.width, this.height);
+    if (this.mode === 'standby' && this.standbyPrepared) this.prepareStandbyVisual();
   }
 
   telemetry() {
     const stats = this.renderer?.stats;
     return {
-      mode: this.mode, suspended: this.suspended, renderedFrames: this.frameCount,
+      mode: this.mode, standbyPrepared: this.standbyPrepared,
+      suspended: this.suspended, renderedFrames: this.frameCount,
       particles: this.solver?.count ?? 0, solverFrame: this.solver?.frame ?? 0,
       pps: this.mode === 'live' ? this.liveValues.emission * 2400 : this.lastStatus?.pps ?? 0,
       capped: this.mode === 'live' ? (this.solver?.count ?? 0) >= LIVE_PARTICLE_CAP : this.lastStatus?.capped ?? false,
@@ -390,7 +456,8 @@ export class FluidRuntime {
 
   private publishStats(): void {
     if (!this.canvas) return;
-    this.canvas.dataset.fluidDirector = this.mode === 'timeline' ? 'fluids-show' : 'fluids-live';
+    this.canvas.dataset.fluidDirector = this.mode === 'standby' ? 'fluids-standby'
+      : this.mode === 'timeline' ? 'fluids-show' : 'fluids-live';
     this.canvas.dataset.fluidsShowParticles = String(this.solver?.count ?? 0);
     this.canvas.dataset.fluidsShowEvents = String(this.lastStatus?.activeEvents ?? 0);
     this.canvas.dataset.fluidsShowGestures = String(this.lastStatus?.activeGestures ?? 0);
@@ -412,6 +479,7 @@ export class FluidRuntime {
     if (this.disposed) return;
     this.suspended = true;
     this.disposed = true;
+    this.standbyPrepared = false;
     this.generation += 1;
     this.clearInput();
     this.solver?.dispose();

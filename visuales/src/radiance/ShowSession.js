@@ -49,7 +49,7 @@ function freezeDocument(value) {
   return value;
 }
 
-/** One Output owns the document and clocks; Control only sends commands. */
+/** Output owns the visual timeline clock. Ableton owns all audible playback. */
 export class ShowSession {
   constructor(options = {}) {
     this._fetch = options.fetch ?? globalThis.fetch?.bind(globalThis);
@@ -59,24 +59,24 @@ export class ShowSession {
     }
     this._now = options.now ?? (() => performance.now());
     this._yield = options.yieldTask ?? (() => new Promise((resolve) => setTimeout(resolve, 0)));
-    this._createAudioContext = options.createAudioContext ?? (() => {
-      const Constructor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
-      if (!Constructor) throw new Error('Este navegador no permite preparar audio local.');
-      return new Constructor();
+    this._createOfflineAudioContext = options.createOfflineAudioContext ?? (() => {
+      const Constructor = globalThis.OfflineAudioContext ?? globalThis.webkitOfflineAudioContext;
+      if (!Constructor) throw new Error('No se pudo decodificar la onda de referencia. El show visual sigue disponible.');
+      // This context only decodes the reference file. It has no hardware output
+      // and is never rendered, resumed or connected to an audio node.
+      return new Constructor(2, 1, 44100);
     });
     const base = options.baseUrl ?? import.meta.env?.BASE_URL ?? '/';
     this._assetBase = `${base.endsWith('/') ? base : `${base}/`}radiance/`;
     this._doc = null;
     this._revision = 0;
-    this._mode = 'local';
     this._offset = 0;
     this._startedAt = 0;
     this._playing = false;
     this._loop = { from: 0, to: 0, on: false };
-    this._context = null;
-    this._gain = null;
-    this._buffer = null;
-    this._source = null;
+    this._referenceContext = null;
+    this._referenceAttempted = false;
+    this._waveformDecoded = false;
     this._peaks = null;
     this._loading = null;
     this._disposed = false;
@@ -89,14 +89,15 @@ export class ShowSession {
   get revision() { return this._revision; }
   get duration() { return this._doc?.duration ?? 0; }
   get time() { return clamp(this._rawTime(), 0, this.duration); }
-  get playing() { return this._playing && (this._mode === 'silent' || this.audioReady); }
-  get audioMode() { return this._mode; }
-  get audioReady() { return !!this._buffer && this._context?.state === 'running'; }
+  get playing() { return this._playing; }
+  get audioMode() { return 'external'; }
+  // Retained for old clients: the web page never prepares audible playback.
+  get audioReady() { return false; }
 
   async load() {
     this._assertLive();
     if (this._loading) return this._loading;
-    if (this._doc && this._buffer) return this.state();
+    if (this._doc && this._referenceAttempted) return this.state();
     this._loading = this._load();
     try { return await this._loading; }
     finally { this._loading = null; }
@@ -125,7 +126,7 @@ export class ShowSession {
         }
         this._loop.to = this.duration;
       }
-      if (!this._buffer) await this._loadAudio();
+      if (!this._referenceAttempted) await this._loadWaveform();
       this._assertLive();
       return this.state();
     } catch (error) {
@@ -134,54 +135,51 @@ export class ShowSession {
     }
   }
 
-  async _loadAudio() {
+  async _loadWaveform() {
+    this._referenceAttempted = true;
     try {
-      this._context ??= this._createAudioContext();
-      // Suspended contexts can decode. Waiting for resume here would strand
-      // preload forever before the operator's first activation gesture.
+      this._referenceContext = this._createOfflineAudioContext();
       const response = await this._fetch(`${this._assetBase}audio/fluids.wav`);
       if (!response.ok) throw new Error(`No se pudo cargar fluids.wav (${response.status}).`);
-      const buffer = await this._context.decodeAudioData(await response.arrayBuffer());
+      const buffer = await this._referenceContext.decodeAudioData(await response.arrayBuffer());
       this._assertLive();
       const peaks = await this._buildPeaks(buffer);
       this._assertLive();
-      this._gain ??= this._context.createGain();
-      this._gain.connect(this._context.destination);
-      this._buffer = buffer;
+      this._waveformDecoded = true;
       this._peaks = peaks;
       this._audioError = null;
     } catch (error) {
       this._audioError = error instanceof Error ? error.message : String(error);
-      throw error;
+      // A missing/unsupported reference waveform must not prevent scene 25.
+    } finally {
+      this._referenceContext = null;
     }
   }
 
   async arm() {
-    this._assertLive();
-    this._context ??= this._createAudioContext();
-    // Invoke resume immediately, while still handling the user's gesture.
-    const resumed = this._context.resume();
-    await resumed;
-    await this.load();
-    if (!this.audioReady) throw new Error('El navegador aún no habilitó el audio. Activá «Armar audio» en Output.');
-    return this.state();
+    // Compatibility with older editors: preparation only, never audio output.
+    return this.load();
   }
 
-  restart() {
+  restart(cueTimeSeconds = this._clock()) {
     this._assertPlayable();
-    this.seek(0);
-    this.play();
-    return this.state();
+    this._assertCueTime(cueTimeSeconds);
+    this._playing = false;
+    this._offset = 0;
+    return this.play(cueTimeSeconds);
   }
 
-  play() {
+  play(cueTimeSeconds = this._clock()) {
     this._assertPlayable();
+    this._assertCueTime(cueTimeSeconds);
     if (this._playing) return this.state();
     if (this._offset >= this.duration) this._offset = 0;
     if (this._loop.on && this._offset >= this._loop.to) this._offset = this._loop.from;
-    this._startedAt = this._clock();
-    if (this._mode === 'local') this._startSource();
+    // The cue timestamp is performance.now()/1000 at MIDI receipt, not the
+    // later instant when an asynchronous fallback finishes preparing Fluid.
+    this._startedAt = cueTimeSeconds;
     this._playing = true;
+    this.tick();
     return this.state();
   }
 
@@ -191,7 +189,6 @@ export class ShowSession {
       this._offset = this.time;
     }
     this._playing = false;
-    this._stopSource();
     return this.state();
   }
 
@@ -199,7 +196,6 @@ export class ShowSession {
     this._assertDocument();
     if (!finite(seconds)) throw new Error('El tiempo de Fluids debe ser un número finito.');
     const wasPlaying = this._playing;
-    this._stopSource();
     this._playing = false;
     this._offset = clamp(seconds, 0, this.duration);
     // A seek to the end holds the final frame instead of implicitly replaying.
@@ -222,13 +218,9 @@ export class ShowSession {
     return this.state();
   }
 
-  setAudioMode(mode) {
-    if (mode !== 'local' && mode !== 'silent') throw new Error('Modo de audio Fluids inválido.');
-    if (mode === this._mode) return this.state();
-    // Switching clocks is an explicit paused handoff. Silent is a free-running
-    // local clock for an external soundtrack, not Ableton synchronization.
-    this.pause();
-    this._mode = mode;
+  setAudioMode(_legacyMode) {
+    // Persisted local/silent preferences and old remote commands cannot enable
+    // sound or interrupt the running visual timeline. Audio is always external.
     return this.state();
   }
 
@@ -239,12 +231,9 @@ export class ShowSession {
       const span = this._loop.to - this._loop.from;
       this._offset = this._loop.from + ((raw - this._loop.to) % span);
       this._startedAt = this._clock();
-      // AudioBufferSourceNode loops sample-accurately; only re-anchor the
-      // playhead here. Restarting sound per render frame would insert gaps.
     } else if (raw >= this.duration) {
       this._offset = this.duration;
       this._playing = false;
-      this._stopSource();
     }
     return this.time;
   }
@@ -257,16 +246,13 @@ export class ShowSession {
     const next = freezeDocument(validateDocument(raw));
     this.tick();
     const position = this.time;
-    const wasPlaying = this._playing;
     this._doc = next;
     this._revision += 1;
     if (this._loop.to > this.duration || this._loop.from >= this.duration) {
       this._loop = { from: 0, to: this.duration, on: false };
     }
-    // Normal curve editing does not recreate the sound source. Only changes
-    // that invalidate the active playhead or loop require transport surgery.
+    // Normal curve edits preserve the cue anchor and the running playhead.
     if (position >= this.duration) this.seek(this.duration);
-    else if (wasPlaying && this._source) this._configureSourceLoop();
     try {
       this._storage?.setItem(SHOW_STORAGE_KEY, JSON.stringify({ version: 1, revision: this._revision, doc: this._doc }));
       this._storageError = null;
@@ -284,9 +270,11 @@ export class ShowSession {
       time: this.time,
       playing: this.playing,
       duration: this.duration,
-      audioMode: this._mode,
+      audioMode: 'external',
       audioReady: this.audioReady,
-      audioDecoded: !!this._buffer,
+      audioDecoded: this._waveformDecoded,
+      waveformReady: !!this._peaks,
+      transportReady: !!this._doc,
       loop: { ...this._loop },
       error: this._error,
       audioError: this._audioError,
@@ -299,48 +287,19 @@ export class ShowSession {
   dispose() {
     this.pause();
     this._disposed = true;
-    this._buffer = null;
+    this._referenceContext = null;
     this._peaks = null;
-    try { this._gain?.disconnect(); } catch { /* Already detached. */ }
-    try { void this._context?.close()?.catch(() => {}); } catch { /* Already closed. */ }
   }
 
-  _clock() { return this._mode === 'local' ? this._context?.currentTime ?? 0 : this._now() / 1000; }
+  _clock() { return this._now() / 1000; }
   _rawTime() { return this._offset + (this._playing ? Math.max(0, this._clock() - this._startedAt) : 0); }
   _assertLive() { if (this._disposed) throw new Error('La sesión Fluids ya está cerrada.'); }
   _assertDocument() {
     this._assertLive();
     if (!this._doc) throw new Error('El documento Fluids todavía no está cargado.');
   }
-  _assertPlayable() {
-    this._assertDocument();
-    if (this._mode === 'local' && !this.audioReady) {
-      throw new Error('Armá el audio en Output antes de iniciar Fluids, o elegí explícitamente el modo sin audio.');
-    }
-  }
-  _configureSourceLoop() {
-    if (!this._source) return;
-    this._source.loop = this._loop.on;
-    this._source.loopStart = this._loop.from;
-    this._source.loopEnd = Math.min(this._loop.to, this._buffer.duration);
-  }
-  _startSource() {
-    this._stopSource();
-    const source = this._context.createBufferSource();
-    source.buffer = this._buffer;
-    source.connect(this._gain);
-    this._source = source;
-    this._configureSourceLoop();
-    try { source.start(0, Math.min(this._offset, this._buffer.duration)); }
-    catch (error) { this._stopSource(); throw error; }
-  }
-  _stopSource() {
-    const source = this._source;
-    this._source = null;
-    if (!source) return;
-    try { source.stop(); } catch { /* A stopped source can still be disconnected. */ }
-    try { source.disconnect(); } catch { /* Context teardown already detached it. */ }
-  }
+  _assertPlayable() { this._assertDocument(); }
+  _assertCueTime(seconds) { if (!finite(seconds)) throw new Error('El instante del cue de Fluids debe ser un número finito en segundos.'); }
 
   async _buildPeaks(buffer) {
     const count = Math.max(1, Math.ceil(buffer.duration * PEAK_RATE));

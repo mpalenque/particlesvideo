@@ -27,7 +27,7 @@ beforeEach(() => {
   transport = new RemoteTransport(152.694);
   channel = TestChannel.instances.at(-1)!;
   channel.deliver({ t: 'fluids:state', state: { time: 12, duration: 152.694,
-    playing: false, audioMode: 'silent', audioReady: false } });
+    playing: false, audioMode: 'external', audioReady: false, loaded: true } });
   channel.deliver({ t: 'fluids:document', doc: doc(), revision: 4 });
 });
 
@@ -48,6 +48,16 @@ describe('remote timeline document and transport', () => {
     expect(channel.sent.at(-1)).toMatchObject({ t: 'fluids:command', command: 'play' });
     expect(transport.playing).toBe(false);
     expect(transport.time).toBe(12);
+    expect(transport.ready).toBe(true);
+    expect(transport.state.audioMode).toBe('external');
+  });
+
+  it('normalizes legacy audio preferences to external without enabling sound', () => {
+    channel.deliver({ t: 'fluids:state', state: { audioMode: 'local', audioReady: true } });
+    expect(transport.state.audioMode).toBe('external');
+    expect(transport.state.audioReady).toBe(false);
+    transport.command('audio-mode', 'local');
+    expect(channel.sent.at(-1)).toMatchObject({ command: 'audio-mode', value: 'external' });
   });
 
   it('waits for edit ACKs and keeps newer edits while one revision is in flight', () => {

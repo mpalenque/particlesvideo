@@ -9,8 +9,10 @@ export interface OutputState {
   time: number;
   playing: boolean;
   duration: number;
-  audioMode: 'local' | 'silent';
+  audioMode: 'external';
   audioReady: boolean;
+  loaded?: boolean;
+  transportReady?: boolean;
   error?: string | null;
   audioError?: string | null;
   storageError?: string | null;
@@ -23,7 +25,8 @@ export interface OutputState {
 
 type Listener = (message: any) => void;
 
-/** The output owns audio, simulation, document persistence and transport.
+/** The output owns simulation, document persistence and the visual transport.
+ * Ableton plays the external soundtrack; this web editor never produces sound.
  * This facade interpolates its clock only for the editor playhead. */
 export default class RemoteTransport {
   readonly clientId = `fluids-editor-${crypto.randomUUID()}`;
@@ -47,7 +50,7 @@ export default class RemoteTransport {
 
   constructor(duration: number) {
     this.state = { status: 'waiting', scene: 0, mode: 'inactive', time: 0, playing: false,
-      duration, audioMode: 'local', audioReady: false };
+      duration, audioMode: 'external', audioReady: false };
     this.channel.addEventListener('message', this.receive);
     this.hello();
     this.heartbeat = window.setInterval(() => {
@@ -61,7 +64,7 @@ export default class RemoteTransport {
     }, 1500);
   }
 
-  get ready() { return this.state.audioReady || this.state.audioMode === 'silent'; }
+  get ready() { return this.documentReady || Boolean(this.state.loaded || this.state.transportReady); }
   get hasUnsavedDocument() { return Boolean(this.pending || this.inFlight || this.conflict); }
   get playing() { return this.connected && this.state.playing; }
   get duration() { return this.state.duration; }
@@ -81,6 +84,7 @@ export default class RemoteTransport {
   private emit(message: any) { for (const listener of this.listeners) listener(message); }
   private hello() { this.channel.postMessage({ t: 'fluids:hello', clientId: this.clientId }); }
   command(command: string, value?: unknown) {
+    if (command === 'audio-mode') value = 'external';
     this.channel.postMessage({ t: 'fluids:command', command, value, clientId: this.clientId });
   }
   async arm() { this.command('arm'); }
@@ -130,7 +134,7 @@ export default class RemoteTransport {
     if (message.t === 'fluids:state' && message.state) {
       this.observeOwner(message.state.ownerId);
       const ended = this.state.playing && !message.state.playing && message.state.time >= message.state.duration;
-      this.state = { ...this.state, ...message.state };
+      this.state = { ...this.state, ...message.state, audioMode: 'external', audioReady: false };
       this.sampledAt = performance.now();
       this.connected = true;
       this.emit({ t: 'state', state: this.state });

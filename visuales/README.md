@@ -2,32 +2,30 @@
 
 Visuales en tiempo real (WebGPU / three.js + TSL) para la pantalla LED de 8 × 3 m
 (**2688 × 1008 px**). Controlado por MIDI desde Ableton y por OSC.
-El plan completo del proyecto está en `../../PLAN.md`; los desvíos y decisiones, en `NOTAS.md`.
+Primera lectura para continuar el proyecto: [contexto vigente](docs/CONTEXTO-ACTUAL.md), [sistemas](docs/ARQUITECTURA-Y-SISTEMAS.md) y [configuración](docs/CONFIGURACION.md). El plan histórico está en `../../PLAN.md`; las decisiones anteriores, en `NOTAS.md`.
 
-**Fluids integrado:** la escena **24** reproduce el timeline completo de **152,694 s** y la **25** habilita el mismo motor para MIDI/OSC en vivo. Se seleccionan con las notas existentes **24/25 del canal 10**; 26–29 siguen reservadas. El editor de curvas, eventos, gestos y waveform está en **`fluids.html`**, accesible también desde `editor.html`. La integración funcional está verificada: tres pasadas de producción y la prueba final con preview presentaron a 60 FPS sin intervalos >20 ms. **La física sí bajó de 50 Hz en algunas ventanas.** 210 tests, TypeScript y build aprobados. [Resultados y límites](docs/integracion-radiance/RENDIMIENTO.md).
+**Fluids, decisión vigente:** **24 = previa negra con sólo una línea blanca**, timeline detenido en cero y física vacía/preparada; **25 = PLAY del timeline completo desde cero**. Notas existentes **24/25 del canal 10**, sin reiniciar por notas repetidas; entrar desactiva loops de ensayo. **Audio siempre desde Ableton; la web nunca reproduce el WAV**, que queda para waveform y referencia. El motor live se conserva sin escena asignada; **26–29 libres**. [Operación actual](docs/integracion-radiance/OPERACION.md).
 
-Para instalar desde los lockfiles, ejecutar **`npm ci`**: su `postinstall` prepara también las dependencias aisladas de Radiance. Antes del cue 24, hacer clic en **Armar audio de Fluids en la ventana de salida** (`vis-salida`). El modo local reproduce el WAV; **Audio en Ableton** usa un reloj local iniciado por el cue, sin sincronización absoluta con Ableton. [Guía de operación, controles, respaldos y validaciones](docs/integracion-radiance/OPERACION.md).
+Para instalar desde los lockfiles, ejecutar **`npm ci`**: su `postinstall` prepara también las dependencias aisladas de Radiance. El timeline está en **`http://localhost:5173/fluids.html`**, el editor normal en **`/editor.html`** y la salida en **`/`** (ventana `vis-salida`). No hace falta armar reproducción de audio web. El reloj visual arranca por cue y no sigue automáticamente la posición de Ableton. [Plan original de Fluids preservado](docs/origen-radiance/INDICE.md).
+
+Flujo, editor, 217 tests, TypeScript y build aprobados. Las pruebas de rendimiento variaron entre una corrida con caídas y su repetición a ~60 FPS; no se garantiza un mínimo permanente. [Resultados actuales y límites](docs/integracion-radiance/VALIDACION-CUES-24-25.md).
 
 ---
 
 ## 1. Preparar la máquina (una sola vez)
 
 1. **Chrome** actualizado (≥ 113, con WebGPU). Node 24 ya instalado.
-2. **Escala de pantalla al 100 %** en Windows para la salida LED. Si `devicePixelRatio` no es 1
-   las líneas de 1 px salen borrosas — el overlay de fps y el editor avisan si pasa.
-3. **loopMIDI**: crear un puerto virtual llamado `Visuales`.
-4. En **Ableton**: Preferencias → Link/Tempo/MIDI → activar *Track* en la salida `Visuales`.
-   Las pistas MIDI que disparan visuales salen a ese puerto, cada una en su canal.
-5. `npm install` dentro de esta carpeta.
+2. Usar la salida en modo nativo: el canvas conserva **2688×1008 píxeles físicos** y compensa el DPR por CSS. Comprobar el encuadre en la pantalla LED.
+3. Conservar el puerto MIDI utilizado por el set. El documentado es **RTX3090 (Port 2)**; si se crea un puerto loopMIDI nuevo, elegir ese mismo puerto en Ableton y habilitarlo en el editor.
+4. En **Ableton**: Preferencias → Link/Tempo/MIDI → activar *Track* en la salida que llega a Visuales. Las notas de escena usan **canal 10**.
+5. `npm ci` dentro de esta carpeta.
 
-Canales sugeridos (es solo orientación, todo se mapea con "learn"):
+Configuración de escenas vigente; los demás canales conservan sus mapeos del set:
 
 | Canal | Para qué |
 |---|---|
-| 1 | Escenas (`scene.goto`) |
-| 2 | Batería: rayos, barridos, golpes |
-| 3 | Sintes: grillas, línea, titileo |
-| cualquiera | CC para parámetros continuos |
+| 10 | Escenas (`scene.goto`); nota 24 previa, nota 25 PLAY |
+| Los demás | Según `public/mappings.default.json` y los mapeos aprendidos; ver el monitor y Learn |
 
 ---
 
@@ -48,7 +46,7 @@ Para el show conviene el build, que es más estable que el server de desarrollo:
 
 ```
 npm run build
-npm run preview    # también en el 5173
+npm run preview -- --port 5173
 ```
 
 Después, `tools/launch-show.bat` abre las dos ventanas: la **salida** en kiosk sobre la LED y el
@@ -57,6 +55,7 @@ donde arranca la LED en el escritorio extendido.
 
 - **Salida**: `http://localhost:5173/` — solo el canvas, sin ninguna UI encima.
 - **Editor**: `http://localhost:5173/editor.html` — va en la otra pantalla.
+- **Timeline Fluids**: `http://localhost:5173/fluids.html` — previa 24, PLAY 25, curvas, eventos y gestos.
 
 El editor refleja la salida: si no está abierta la ventana de salida, avisa y espera.
 

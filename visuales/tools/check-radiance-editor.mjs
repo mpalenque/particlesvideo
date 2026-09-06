@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { browser, metrics, root, sleep } from './radiance-browser.mjs';
 
-const out = join(root, 'radiance-check', 'editor');
+const out = join(root, 'radiance-check', 'cues-24-25', 'editor');
 mkdirSync(out, { recursive: true });
 const page = await browser({ base: '/?clean', production: process.argv.includes('--production') });
 const ev = page.ev;
@@ -11,7 +11,7 @@ const report = { tests: [], errors: page.errors };
 const deadline = setTimeout(() => { void page.close(); process.exit(2); }, 180000);
 try {
   await page.waitFor('!!window.vis', 90000);
-  await ev(`vis.params.set('fluids.audioMode','silent');window.__doc=JSON.stringify(vis.radiance.session.doc);
+  await ev(`window.__doc=JSON.stringify(vis.radiance.session.doc);
     window.__editor=document.createElement('iframe');window.__editor.src='/fluids.html';
     Object.assign(window.__editor.style,{position:'fixed',left:'0',top:'0',width:'1500px',height:'1008px',border:'0',zIndex:'99'});
     document.body.appendChild(window.__editor);`);
@@ -23,13 +23,18 @@ try {
   await page.shot(join(out, 'timeline.png'));
   report.tests.push('editor carga documento y lanes completas sin segundo renderer');
   await ev(`Array.from(${doc}.querySelectorAll('button')).find(b=>b.textContent.startsWith('24 ·')).click()`);
-  await page.waitFor(`vis.scenes.current==='24'&&vis.radiance.session.playing`);
+  await page.waitFor(`vis.scenes.current==='24'&&!vis.radiance.pending`);
+  assert.equal(await ev('vis.radiance.session.playing'), false);
+  assert.equal(await ev('vis.radiance.session.time'), 0);
+  assert.equal(await ev(`${doc}.body.innerText.includes('ARMAR AUDIO')`), false);
+  await ev(`Array.from(${doc}.querySelectorAll('button')).find(b=>b.textContent.startsWith('25 ·')).click()`);
+  await page.waitFor(`vis.scenes.current==='25'&&vis.radiance.session.playing`);
   const t0 = await ev('vis.radiance.session.time');
   await sleep(200);
   await ev(`Array.from(${doc}.querySelectorAll('button')).find(b=>b.textContent==='PAUSA').click()`);
   await page.waitFor('!vis.radiance.session.playing');
   assert.ok(await ev('vis.radiance.session.time') > t0);
-  report.tests.push('play/pause remoto gobierna reloj de salida');
+  report.tests.push('24 previa, 25 play y pausa remota gobiernan reloj sin controles de reproducción de audio');
   // Author a material cue in the real React UI, verify ACK, undo and redo.
   await ev(`Array.from(${doc}.querySelectorAll('.fs-material button')).map(b=>b.textContent)`);
   const rev = await ev('vis.radiance.session.revision');
@@ -41,20 +46,20 @@ try {
   await page.waitFor(`vis.radiance.session.revision>${editedRevision}`);
   assert.equal(await ev('JSON.stringify(vis.radiance.session.doc)'), await ev('window.__doc'));
   report.tests.push('edición real, ACK y deshacer conservan el show completo');
-  // MIDI enters 25 through the existing mapping; live actions are mapped only in this test session.
+  // Ambos cues usan el mapeo real sin sumar un segundo play a la nota 25.
+  await ev(`vis.mapper.dispatch({kind:'note',channel:10,note:24,on:true,velocity:100});`);
+  await page.waitFor(`vis.scenes.current==='24'&&!vis.radiance.pending`);
   await ev(`vis.mapper.dispatch({kind:'note',channel:10,note:25,on:true,velocity:100});`);
   await page.waitFor('vis.scenes.current==="25"');
-  await ev(`vis.mapper.setMappings([...vis.mapper.mappings,{id:'test-fluid-burst',source:{kind:'note',channel:3,note:70},
-    mode:'trigger',target:'fluids.live.burst',arg:900,scenes:['25']}]);
-    vis.mapper.dispatch({kind:'note',channel:3,note:70,on:true,velocity:127});`);
-  await sleep(300);
+  await page.waitFor('vis.radiance.session.playing');
+  await sleep(1200);
   assert.ok(await ev('vis.radiance.runtime.telemetry().particles') > 0);
   assert.equal(await ev('JSON.stringify(vis.radiance.session.doc)'), await ev('window.__doc'));
-  report.tests.push('nota 25 y ráfaga MIDI funcionan sin escribir timeline');
+  report.tests.push('notas MIDI 24→25 inician el show conservando el documento editado');
 
   // Cancel during an in-flight handoff, not only before the promise starts.
-  await ev(`window.__enter=vis.radiance.runtime.enterTimeline.bind(vis.radiance.runtime);
-    vis.radiance.runtime.enterTimeline=async(...a)=>{await new Promise(r=>window.__release=r);return window.__enter(...a)};
+  await ev(`window.__enter=vis.radiance.runtime.enterStandby.bind(vis.radiance.runtime);
+    vis.radiance.runtime.enterStandby=async(...a)=>{await new Promise(r=>window.__release=r);return window.__enter(...a)};
     vis.scenes.goto('24');`);
   await page.waitFor('!!window.__release');
   await ev(`vis.scenes.goto('20');window.__release();`);
@@ -62,9 +67,11 @@ try {
   assert.equal(await ev('vis.scenes.current'), '20');
   assert.equal(await ev('vis.radiance.active'), false);
   assert.equal(await ev('vis.renderer.domElement.style.visibility'), 'visible');
-  await ev(`vis.radiance.runtime.enterTimeline=window.__enter;vis.scenes.goto('24');`);
+  await ev(`vis.radiance.runtime.enterStandby=window.__enter;vis.scenes.goto('24');`);
   await page.waitFor('vis.scenes.current==="24" && !vis.radiance.pending');
   report.tests.push('cancelar durante drenaje no muestra canvas tardío y permite reentrar');
+  await ev(`vis.scenes.goto('25')`);
+  await page.waitFor(`vis.scenes.current==='25'&&vis.radiance.session.playing`);
 
   // Capture remote preview while monitoring the only output loop.
   await ev(`${doc}.querySelector('.fs-remote-nav input[type=checkbox]').click();

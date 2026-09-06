@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "mappings": [
     { "id": "sc01", "source": { "kind": "note", "channel": 10, "note": 1 }, "mode": "trigger", "target": "scene.goto", "arg": "1" },
     { "id": "sc02", "source": { "kind": "note", "channel": 10, "note": 2 }, "mode": "trigger", "target": "scene.goto", "arg": "2" },
@@ -24,8 +24,8 @@
     { "id": "sc21", "source": { "kind": "note", "channel": 10, "note": 21 }, "mode": "trigger", "target": "scene.goto", "arg": "21" },
     { "id": "sc22", "source": { "kind": "note", "channel": 10, "note": 22 }, "mode": "trigger", "target": "scene.goto", "arg": "22" },
     { "id": "sc23", "source": { "kind": "note", "channel": 10, "note": 23 }, "mode": "trigger", "target": "scene.goto", "arg": "23" },
-    { "id": "sc24", "source": { "kind": "note", "channel": 10, "note": 24 }, "mode": "trigger", "target": "scene.goto", "arg": "24" },
-    { "id": "sc25", "source": { "kind": "note", "channel": 10, "note": 25 }, "mode": "trigger", "target": "scene.goto", "arg": "25" },
+    { "id": "sc24", "source": { "kind": "note", "channel": 10, "note": 24 }, "mode": "trigger", "target": "scene.goto", "arg": "24", "addedIn": 11 },
+    { "id": "sc25", "source": { "kind": "note", "channel": 10, "note": 25 }, "mode": "trigger", "target": "scene.goto", "arg": "25", "addedIn": 11 },
     { "id": "sc26", "source": { "kind": "note", "channel": 10, "note": 26 }, "mode": "trigger", "target": "scene.goto", "arg": "26" },
     { "id": "sc27", "source": { "kind": "note", "channel": 10, "note": 27 }, "mode": "trigger", "target": "scene.goto", "arg": "27" },
     { "id": "sc28", "source": { "kind": "note", "channel": 10, "note": 28 }, "mode": "trigger", "target": "scene.goto", "arg": "28" },

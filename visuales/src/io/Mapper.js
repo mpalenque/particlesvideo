@@ -1,6 +1,6 @@
 import { clamp } from '../core/Tween.js';
 
-export const MAPPINGS_VERSION = 10;
+export const MAPPINGS_VERSION = 11;
 
 // Tabla fuente → destino. Es lo único que traduce MIDI/OSC a escrituras en Params.
 export class Mapper {

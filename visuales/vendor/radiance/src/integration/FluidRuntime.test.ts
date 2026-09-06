@@ -43,7 +43,106 @@ describe('FluidRuntime control ownership', () => {
     runtime = new FluidRuntime();
     await runtime.init({ append() {} } as unknown as HTMLElement);
   });
-  afterEach(() => { runtime.dispose(); vi.unstubAllGlobals(); });
+  afterEach(() => { runtime.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it('keeps scene 24 stationary with only the initial white line and no timeline or physics work', async () => {
+    const doc = parseShowDoc(authoredShow);
+    doc.events.push(makeEvent('strobe-lines', 0), makeEvent('emit-burst', 0));
+    doc.curves.lineBreak = { keys: [{ t: 0, v: 1, shape: 'hold' }] };
+    doc.curves.lineEmit = { keys: [{ t: 0, v: 0, shape: 'hold' }] };
+    const savedDoc = JSON.stringify(doc);
+    const updates = vi.spyOn(FluidsShowDirector.prototype, 'update');
+    await runtime.enterStandby(doc);
+    const updateCount = updates.mock.calls.length;
+    const geometry = shared.geometry.setInstances.mock.lastCall[0];
+    expect(geometry).toHaveLength(2);
+    expect(geometry[0]).toMatchObject({ x: 0.5, y: 0.5, color: 0xffffff, rot: 0, h: 0.0035, shape: 0 });
+    expect(geometry[1].color).toBe(0);
+    // Keep the emissive face geometry unchanged while disabling its HRC
+    // injection; otherwise the display field draws a large cone under it.
+    expect(geometry[0]).toMatchObject({ emit: 1.15, shade: 1.1 });
+    expect(shared.geometry.setGain).toHaveBeenLastCalledWith(0);
+    shared.solver.step.mockClear();
+    shared.solver.applyPointer.mockClear();
+    shared.solver.updateInterpolation.mockClear();
+    const masses = shared.solver.setMaterialMass.mock.calls.length;
+    const physics = shared.solver.setParameters.mock.calls.length;
+    const geometryChanges = shared.geometry.setInstances.mock.calls.length;
+    runtime.setGesture({ mode: 'attract', x: 0.5, y: 0.5, vx: 0, vy: 0, strength: 1, radius: 0.3 });
+    runtime.liveAction('burst', { count: 300 });
+    for (let index = 0; index < 120; index += 1) {
+      runtime.frame({ now: 100 + index / 60, time: 140, playing: true, dt: 1 / 60, live: { emission: 1 } });
+    }
+    expect(updates).toHaveBeenCalledTimes(updateCount);
+    expect(shared.geometry.setInstances).toHaveBeenCalledTimes(geometryChanges);
+    expect(shared.solver.step).not.toHaveBeenCalled();
+    expect(shared.solver.applyPointer).not.toHaveBeenCalled();
+    expect(shared.solver.updateInterpolation).not.toHaveBeenCalled();
+    expect(shared.solver.setMaterialMass).toHaveBeenCalledTimes(masses);
+    expect(shared.solver.setParameters).toHaveBeenCalledTimes(physics);
+    expect(shared.renderer.render.mock.lastCall[1]).toMatchObject({ blackOutput: 0, backgroundBlack: 1,
+      radiance: 0, radianceExposure: 0 });
+    expect(runtime.telemetry()).toMatchObject({ mode: 'standby', standbyPrepared: true,
+      particles: 0, solverFrame: 0, activeEvents: 0, activeGestures: 0, pps: 0 });
+    expect(JSON.stringify(doc)).toBe(savedDoc);
+  });
+
+  it('starts scene 25 synchronously from prepared standby without resetting the solver or GPU caches', async () => {
+    const doc = parseShowDoc(authoredShow);
+    doc.events.push(makeEvent('reset-fluid', 0));
+    await runtime.enterStandby(doc);
+    runtime.frame({ now: 30, time: 0, dt: 1 / 60 });
+    runtime.suspend(); // The controller may suspend around the scene handoff.
+    const drains = shared.solver.drain.mock.calls.length;
+    const resets = shared.solver.reset.mock.calls.length;
+    const radianceResets = shared.renderer.resetRadiance.mock.calls.length;
+    const expected = new FluidsShowDirector();
+    expected.setDoc(doc);
+    expected.seek(0);
+    const first = expected.update({ time: 0, dt: 1 / 60, playing: true, aspect: 2688 / 1008, particleCount: 0 });
+    expect(runtime.startTimeline()).toBe(true);
+    expect(shared.solver.drain).toHaveBeenCalledTimes(drains);
+    expect(shared.solver.reset).toHaveBeenCalledTimes(resets);
+    expect(shared.renderer.resetRadiance).toHaveBeenCalledTimes(radianceResets);
+    expect(runtime.telemetry()).toMatchObject({ mode: 'timeline', suspended: false, standbyPrepared: false });
+    runtime.frame({ now: 31, time: 0, playing: true, dt: 1 / 60 });
+    expect(shared.geometry.setGain).toHaveBeenLastCalledWith(1);
+    expect(shared.renderer.render.mock.lastCall[1]).toEqual(first.render);
+    expect(shared.geometry.setInstances).toHaveBeenLastCalledWith(first.geometry, 2688, 1008);
+    // The time-zero event is still pending: standby did not consume it.
+    expect(first.resetParticles).toEqual([0, 0, 0, 0]);
+    expect(shared.solver.reset).toHaveBeenCalledTimes(resets + 1);
+    expect(runtime.startTimeline()).toBe(false);
+  });
+
+  it('refreshes initial line edits during standby without starting or resetting physics', async () => {
+    await runtime.enterStandby(parseShowDoc(authoredShow));
+    const edited = parseShowDoc(authoredShow);
+    edited.curves.lineX = { keys: [{ t: 0, v: 0.3, shape: 'hold' }] };
+    edited.curves.lineY = { keys: [{ t: 0, v: 0.7, shape: 'hold' }] };
+    const resets = shared.solver.reset.mock.calls.length;
+    runtime.setDocument(edited);
+    expect(shared.geometry.setInstances.mock.lastCall[0][0]).toMatchObject({ x: 0.3, y: 0.7, color: 0xffffff, rot: 0 });
+    expect(shared.solver.reset).toHaveBeenCalledTimes(resets);
+    expect(shared.solver.step).not.toHaveBeenCalled();
+    expect(runtime.telemetry()).toMatchObject({ mode: 'standby', standbyPrepared: true, activeEvents: 0 });
+    expect(runtime.startTimeline()).toBe(true);
+    runtime.frame({ now: 1, time: 0, playing: true, dt: 1 / 60 });
+    expect(shared.geometry.setInstances.mock.lastCall[0][0]).toMatchObject({ x: 0.3, y: 0.7 });
+  });
+
+  it('does not start an incomplete or canceled standby preparation', async () => {
+    expect(runtime.startTimeline()).toBe(false);
+    let release!: () => void;
+    shared.solver.drain.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    const entering = runtime.enterStandby(parseShowDoc(authoredShow));
+    expect(runtime.startTimeline()).toBe(false);
+    runtime.suspend();
+    release();
+    await entering;
+    expect(runtime.startTimeline()).toBe(false);
+    expect(runtime.telemetry()).toMatchObject({ suspended: true, standbyPrepared: false });
+  });
 
   it('restarts timeline with an actually empty solver, including reentry to the same mode', async () => {
     const doc = emptyDoc();
@@ -87,7 +186,7 @@ describe('FluidRuntime control ownership', () => {
     }
   });
 
-  it('preserves particles on 24→25 while removing timeline interactions, lamps and geometry', async () => {
+  it('preserves particles on future live takeover while removing timeline interactions, lamps and geometry', async () => {
     const doc = emptyDoc();
     doc.events.push(makeEvent('attractor', 0));
     await runtime.enterTimeline(doc);
@@ -106,7 +205,7 @@ describe('FluidRuntime control ownership', () => {
     expect(shared.renderer.render.mock.lastCall[1]).toMatchObject({ blackOutput: 0, reactiveSecondaryMaterial: -1 });
   });
 
-  it('enters 25 directly with its independent empty state', async () => {
+  it('can enter the future live engine directly with its independent empty state', async () => {
     shared.solver.count = 123;
     await runtime.enterLive();
     expect(runtime.telemetry()).toMatchObject({ mode: 'live', particles: 0 });

@@ -1,5 +1,7 @@
 # Rendimiento medido de la integración Fluids
 
+> **INFORME HISTÓRICO — asignación anterior «24 PLAY / 25 live».** Estas mediciones y sus 210 tests se conservan como evidencia de aquella implementación. La decisión vigente es **24 previa / 25 PLAY / audio siempre externo**. Este informe no valida ese cambio: consultar [el contexto actual](../CONTEXTO-ACTUAL.md) y los nuevos artefactos bajo `radiance-check/cues-24-25/`.
+
 2026-09-06. **La presentación de la salida cumple el presupuesto de 20 ms en las tres pasadas de producción y en la prueba final con preview. La física no sostiene un mínimo de 50 actualizaciones/s en todas las ventanas medidas.** La integración funcional está comprobada; el requisito estricto de física permanece abierto.
 
 ## Condiciones y método

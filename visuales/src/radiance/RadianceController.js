@@ -12,17 +12,19 @@ const LIVE = {
 // Un único propietario de render, transporte y documento. El editor sólo envía órdenes.
 export class RadianceController {
   static defineParams(params) {
-    params.define({ id: 'fluids.audioMode', type: 'enum', options: ['local', 'silent'], default: 'local',
-      label: 'Audio (local / Ableton con cue)', group: 'fluids', sceneReset: false });
+    // Se conserva el ID para configuraciones anteriores, pero ya no existe salida de audio web.
+    params.define({ id: 'fluids.audioMode', type: 'enum', options: ['external'], default: 'external',
+      label: 'Audio externo · Ableton', group: 'fluids', sceneReset: false });
     for (const [key, [min, max, value, label]] of Object.entries(LIVE)) {
       params.define({ id: `fluids.live.${key}`, type: 'float', min, max, default: value,
-        label: `${label} · escena 25`, group: 'fluids.live', sceneReset: false });
+        label: `${label} · motor libre (sin escena asignada)`, group: 'fluids.live', sceneReset: false });
     }
     for (const [id, label, argHint] of [
-      ['arm', 'Armar Fluids'], ['play', 'Play · escena 24'], ['pause', 'Pausa · escena 24'],
-      ['restart', 'Reiniciar · escena 24'], ['seek', 'Buscar · escena 24', 'segundos'],
-      ['live.burst', 'Ráfaga · escena 25', 'cantidad de partículas'],
-      ['live.attractor', 'Atractor · escena 25'], ['live.reset', 'Reiniciar fluido · escena 25'],
+      ['arm', 'Preparar motor Fluids'], ['standby', 'Previa · escena 24'],
+      ['play', 'Play · escena 25'], ['pause', 'Pausa · escena 25'],
+      ['restart', 'Reiniciar · escena 25'], ['seek', 'Buscar · escena 25', 'segundos'],
+      ['live.burst', 'Ráfaga · motor libre', 'cantidad de partículas'],
+      ['live.attractor', 'Atractor · motor libre'], ['live.reset', 'Reiniciar fluido · motor libre'],
     ]) params.defineAction({ id: `fluids.${id}`, label, argHint, group: id.startsWith('live') ? 'fluids.live' : 'fluids' });
   }
 
@@ -71,16 +73,8 @@ export class RadianceController {
     view.toggleNative = () => { const mode = toggle(); this._fit(); return mode; };
     this._sizeObserver = new MutationObserver(this._fit);
     this._sizeObserver.observe(ctx.renderer.domElement, { attributes: true, attributeFilter: ['style'] });
-    this._makeArmPanel();
-    this.params.onChange('fluids.audioMode', mode => {
-      try {
-        this.session.setAudioMode(mode);
-        if (this.pending) this.pending = { ...this.pending, scheduled: false, token: ++this._generation };
-        this._refreshPanel(); this._resumePending();
-      }
-      catch (error) { this._fail(error); }
-    });
-    for (const name of ['arm', 'play', 'pause', 'restart', 'seek']) {
+    this._makeStatusPanel();
+    for (const name of ['arm', 'standby', 'play', 'pause', 'restart', 'seek']) {
       this.params.onAction(`fluids.${name}`, value => { void this.command(name, value); });
     }
     for (const name of ['burst', 'attractor', 'reset']) {
@@ -99,7 +93,6 @@ export class RadianceController {
     this._preparing = (async () => {
       const { FluidRuntime } = await import('../../vendor/radiance/src/integration/FluidRuntime.ts');
       await this.session.load().catch(error => { if (!this.session.doc) throw error; });
-      this.session.setAudioMode(this.params.get('fluids.audioMode'));
       if (!this.runtime) {
         this.runtime = new FluidRuntime();
         try { await this.runtime.init(this.host); }
@@ -139,7 +132,13 @@ export class RadianceController {
     }
     if (!options.force && (this.pending?.id === id || (this.active && this.ctx.scenes.current === id))) return true;
     const token = ++this._generation;
-    this.pending = { id, options, token };
+    this.pending = { id, options, token, cueTime: performance.now() / 1000 };
+    // Cortar la escena anterior al recibir el cue, incluso si aún se está cargando Fluids.
+    this.session.pause();
+    this._switching = true;
+    this._showOnFrame = false;
+    this.host.style.visibility = 'hidden';
+    this.ctx.renderer.domElement.style.visibility = 'hidden';
     this._resumePending();
     return true;
   }
@@ -149,37 +148,30 @@ export class RadianceController {
     if (!request || request.scheduled) return;
     request.scheduled = true;
     this._queue = this._queue.catch(() => {}).then(async () => {
-      const { id, token, options } = request;
+      const { id, token, options, cueTime } = request;
       await this.prepare();
       if (token !== this._generation) return;
-      if (id === '24' && this.session.audioMode === 'local' && !this.session.audioReady) {
-        request.scheduled = false;
-        this._switching = false;
-        this.host.style.visibility = this.active ? 'visible' : 'hidden';
-        this.ctx.renderer.domElement.style.visibility = this.active ? 'hidden' : 'visible';
-        this.status = 'awaiting-audio';
-        this._refreshPanel();
-        return;
-      }
       // Dejar cerrar el frame anterior antes de entregar el canvas al otro renderer.
       this._switching = true;
       await this.ctx.engine?.whenIdle();
       if (token !== this._generation) return;
       this.session.pause();
-      const preserve = this.active && this.mode === 'timeline';
       this.host.style.visibility = 'hidden';
       this.ctx.renderer.domElement.style.visibility = 'hidden';
-      if (id === '24') await this.runtime.enterTimeline(this.session.doc);
-      else await this.runtime.enterLive({ preserve });
+      if (id === '24') await this.runtime.enterStandby(this.session.doc);
+      else if (!this.runtime.startTimeline()) await this.runtime.enterTimeline(this.session.doc);
       if (token !== this._generation) { this.runtime.suspend(true); return; }
       this.active = true;
-      this.mode = id === '24' ? 'timeline' : 'live';
+      this.mode = id === '24' ? 'standby' : 'timeline';
       this.pending = null;
       this.status = 'active';
       this.error = null;
       this.ctx.scenes.goto(id, { ...options, radianceReady: true, transition: 0 });
       this.runtime.suspend(false);
-      if (id === '24') this.session.restart();
+      // Un loop usado para editar no debe repetirse contra la música completa de Ableton.
+      this.session.setLoop(null);
+      if (id === '24') this.session.seek(0);
+      else this.session.restart(cueTime);
       this._switching = false;
       this._showOnFrame = true;
       this._refreshPanel();
@@ -214,17 +206,18 @@ export class RadianceController {
   async command(command, value) {
     try {
       if (command === 'arm') {
-        // resume debe empezar en el gesto real; el editor remoto no lo transfiere.
-        await this.session.arm();
         await this.prepare();
         this.error = null;
         this._refreshPanel();
         this._resumePending();
       } else if (command === 'scene') this.ctx.scenes.goto(String(value));
-      else if (command === 'play' && (!this.active || this.mode !== 'timeline')) this.ctx.scenes.goto('24');
+      else if (command === 'standby') this.ctx.scenes.goto('24');
+      else if (command === 'play' && (!this.active || this.mode !== 'timeline')) this.ctx.scenes.goto('25');
+      else if (command === 'restart' || command === 'reset') this.requestScene('25', { force: true });
       else if (command === 'audio-mode') {
-        this.params.set('fluids.audioMode', value === 'external' ? 'silent' : value);
-        this.ctx.settings?.record('fluids.audioMode', this.params.get('fluids.audioMode'));
+        // Mensajes de un editor antiguo tampoco pueden habilitar audio.
+        this.session.setAudioMode('external');
+        this.params.set('fluids.audioMode', 'external');
       } else if (command === 'master') this.params.set('master.brightness', value);
       else if (command === 'blackout') this.params.set('master.blackout', value);
       else if (command === 'loop') this.session.setLoop(value ? { ...value, on: true } : null);
@@ -233,7 +226,6 @@ export class RadianceController {
         else if (command === 'pause') this.session.pause();
         else if (command === 'seek') this.session.seek(Number(value));
         else if (command === 'gesture') this.runtime.setGesture(value);
-        else if (command === 'restart' || command === 'reset') this.requestScene('24', { force: true });
       }
       this.publishState();
     } catch (error) { this._fail(error); }
@@ -287,31 +279,20 @@ export class RadianceController {
     if (source) this._preview.capture(source);
   }
 
-  _makeArmPanel() {
+  _makeStatusPanel() {
     this.panel = document.createElement('div');
-    this.panel.id = 'fluids-arm';
+    this.panel.id = 'fluids-status';
     Object.assign(this.panel.style, { position: 'fixed', right: '12px', top: '12px', zIndex: '30',
       background: '#15191feF', color: '#eee', padding: '12px', font: '13px system-ui', borderRadius: '5px', maxWidth: '330px' });
     this.panelText = document.createElement('div');
-    const arm = document.createElement('button');
-    arm.textContent = 'Armar audio de Fluids';
-    arm.onclick = () => { void this.command('arm'); };
-    const silent = document.createElement('button');
-    silent.textContent = 'Audio en Ableton (inicio por cue)';
-    silent.onclick = () => { void this.command('audio-mode', 'silent'); };
-    for (const button of [arm, silent]) Object.assign(button.style, { display: 'block', marginTop: '8px', cursor: 'pointer' });
-    this.panel.append(this.panelText, arm, silent);
+    this.panel.append(this.panelText);
     document.body.appendChild(this.panel);
     this._refreshPanel();
   }
 
   _refreshPanel() {
-    const needsAudio = this.session.audioMode === 'local' && !this.session.audioReady;
-    const clean = new URLSearchParams(location.search).has('clean');
-    this.panel.hidden = !(this.error || (needsAudio && (!clean || this.pending?.id === '24')));
-    this.panelText.textContent = this.error || this.session.state().audioError || (this.status === 'awaiting-audio'
-      ? 'Escena 24 preparada. Activá el audio en esta ventana para comenzar.'
-      : 'Antes del cue 24, armá el audio aquí o seleccioná la reproducción desde Ableton.');
+    this.panel.hidden = !this.error;
+    this.panelText.textContent = this.error || '';
   }
   _fail(error) {
     this.error = error?.message ?? String(error);

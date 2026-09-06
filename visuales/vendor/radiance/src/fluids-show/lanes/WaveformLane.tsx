@@ -92,7 +92,7 @@ export default function WaveformLane(props: WaveformLaneProps) {
       ctx.stroke();
     } else {
       ctx.fillStyle = LANE_COLORS.text;
-      ctx.fillText('ARMÁ EL AUDIO PARA VER LA ONDA', 8, waveMid - 4);
+      ctx.fillText('ONDA DE REFERENCIA NO DISPONIBLE', 8, waveMid - 4);
     }
 
     // Secciones: guía visual, no editables.

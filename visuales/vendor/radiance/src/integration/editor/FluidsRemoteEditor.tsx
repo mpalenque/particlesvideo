@@ -115,7 +115,6 @@ export default function FluidsRemoteEditor() {
   const [view, setView] = useState<TimelineView>({ t0: 0, t1: FLUIDS_DURATION });
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [armed, setArmed] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [stats, setStats] = useState<PageStats | null>(null);
   const [booting, setBooting] = useState(true);
@@ -142,7 +141,6 @@ export default function FluidsRemoteEditor() {
   const [previewOn, setPreviewOn] = useState(false);
   const [connected, setConnected] = useState(false);
   const [sceneNumber, setSceneNumber] = useState<string | number>(0);
-  const [audioMode, setAudioMode] = useState<'local' | 'silent'>('local');
   const [conflict, setConflict] = useState(false);
   const [gestureMode, setGestureMode] = useState<GestureMode>('drag');
   const [gestureRadius, setGestureRadius] = useState(0.08);
@@ -160,7 +158,7 @@ export default function FluidsRemoteEditor() {
   /** Lo que el loop de rAF ejecuta cada frame, siempre en su versión actual. */
   const frameHookRef = useRef<((clock: number, dt: number) => void) | null>(null);
 
-  const duration = transport.ready ? transport.duration : doc.duration;
+  const duration = doc.duration;
   const viewRef = useRef(view);
   viewRef.current = view;
 
@@ -185,18 +183,6 @@ export default function FluidsRemoteEditor() {
     if (output.location.href === 'about:blank') output.location.replace(new URL('./', window.location.href).href);
     output.focus();
   }, []);
-
-  const arm = useCallback(async () => {
-    showOutput();
-    try {
-      await transport.arm();
-      setArmed(transport.ready);
-      setAudioError(transport.ready ? null : 'Para usar el WAV, hacé clic en ARMAR AUDIO en la ventana de salida.');
-      setPeaks(transport.peaks());
-    } catch (error) {
-      setAudioError(error instanceof Error ? error.message : String(error));
-    }
-  }, [showOutput, transport]);
 
   const togglePlay = useCallback(() => { transport.toggle(); }, [transport]);
 
@@ -254,8 +240,6 @@ export default function FluidsRemoteEditor() {
       const state = message.state;
       setConnected(true);
       setSceneNumber(state.scene);
-      setArmed(transport.ready);
-      setAudioMode(state.audioMode);
       setAudioError(state.error || state.audioError || state.storageError || null);
       setBooting(state.status === 'loading');
       if (typeof state.master === 'number') setMaster(state.master);
@@ -429,7 +413,7 @@ export default function FluidsRemoteEditor() {
         }
       }
     } else if (session.from !== null) {
-      // Pausar cierra la toma: el rango grabado termina donde paró el audio.
+      // Pausar cierra la toma donde se detuvo el reloj visual; Ableton es independiente.
       commitRecording();
     }
   }, [commitRecording, gestureMode, gestureRadius, gestureStrength, recArmed, transport]);
@@ -454,7 +438,7 @@ export default function FluidsRemoteEditor() {
   };
 
   // This RAF moves the UI playhead and samples operator gestures only.
-  // The output owns the sole solver, renderer, loop and audio clock.
+  // The output owns the sole solver, renderer and visual clock; audio stays in Ableton.
   useEffect(() => {
     let raf = 0;
     let lastNow = performance.now();
@@ -714,15 +698,10 @@ export default function FluidsRemoteEditor() {
         <a className="fs-btn" href="./" target="vis-salida" onClick={(event) => {
           event.preventDefault(); showOutput();
         }}>ABRIR SALIDA</a>
-        <button className="fs-btn" onClick={() => transport.command('scene', '24')}>24 · SHOW GRABADO</button>
-        <button className="fs-btn" onClick={() => transport.command('scene', '25')}>25 · FLUIDOS MIDI</button>
+        <button className="fs-btn" onClick={() => transport.command('scene', '24')}>24 · PREVIA / RESET</button>
+        <button className="fs-btn" onClick={() => transport.command('scene', '25')}>25 · PLAY SHOW GRABADO</button>
         <span>{connected ? 'SALIDA · ESCENA ' + sceneNumber : 'ESPERANDO SALIDA'}</span>
-        <select className="fs-select" aria-label="Audio del show" value={audioMode}
-          onChange={(event) => transport.command('audio-mode', event.target.value)}>
-          <option value="local">WAV EN SALIDA</option>
-          <option value="silent">AUDIO EN ABLETON · RELOJ DESDE CUE</option>
-        </select>
-        {audioMode === 'local' && !armed && <span className="fs-warn">ARMÁ AUDIO CON UN CLIC EN LA SALIDA</span>}
+        <span>AUDIO EN ABLETON · PLAY VISUAL DESDE EL CUE 25</span>
         <label><input type="checkbox" checked={previewOn}
           onChange={(event) => setPreviewOn(event.target.checked)} /> VISTA PREVIA (2 FPS)</label>
         {conflict && <button className="fs-btn fs-btn-danger" onClick={() => {
@@ -808,11 +787,6 @@ export default function FluidsRemoteEditor() {
 
       <section className="fs-panel fs-editor-only" inert={loadState === 'cargando'}>
         <div className="fs-transport">
-          {!armed && (
-            <button className="fs-btn fs-btn-arm" onClick={() => void arm()}>
-              ARMAR AUDIO EN SALIDA
-            </button>
-          )}
           <button className="fs-btn" onClick={togglePlay}>{playing ? 'PAUSA' : 'PLAY'}</button>
           <button className="fs-btn" onClick={stop}>STOP</button>
           <span className="fs-clock">{formatTime(time)} / {formatTime(duration)}</span>
