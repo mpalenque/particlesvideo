@@ -725,17 +725,12 @@ export const SCENES = [
     mainAction: 'particles.kick',
   },
 
-  // ── LIBRES ──────────────────────────────────────────────────────────────────────────────────
-  // Seis escenas reservadas, pedido de Manuel: quiere el cableado MIDI armado ahora para poder
-  // mapear las notas desde Ableton, y definir después qué va en cada una.
-  //
-  // No listan ningún param a propósito. Eso NO es un descuido: una escena que no lista nada cae
-  // entera en el BASE, o sea "todo apagado", así que al dispararla la pantalla queda en negro de
-  // forma limpia y previsible — y, sobre todo, apaga bien lo que venía de la escena anterior. Un
-  // relleno copiado de otra escena sería peor: se vería algo que nadie decidió.
-  //
-  // Cuando cada una tenga contenido, se le agrega el bloque `params` y listo; el mapeo ya está.
-  ...Array.from({ length: 6 }, (_, i) => ({
-    id: String(24 + i), name: `Libre ${i + 1}`, transition: 1.0, params: {},
+  // RadianceController prepara el motor antes de confirmar 24/25. Los presets vacíos apagan
+  // las capas de Parte 1; Engine entrega los frames al único runtime Fluid activo.
+  // El timeline entero pertenece a la 24. Las escenas 26–29 siguen libres con su MIDI existente.
+  { id: '24', name: 'Fluids · timeline', transition: 0, params: {}, mainAction: 'fluids.play' },
+  { id: '25', name: 'Fluids · MIDI', transition: 0, params: {}, mainAction: 'fluids.live.burst' },
+  ...Array.from({ length: 4 }, (_, i) => ({
+    id: String(26 + i), name: `Libre ${i + 3}`, transition: 1.0, params: {},
   })),
 ];

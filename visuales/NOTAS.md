@@ -2,6 +2,16 @@
 
 Qué se hizo distinto al plan y por qué, y problemas conocidos. Corto.
 
+## Integración Radiance — 2026-09-06
+
+- Implementadas 24 = timeline Fluids completo y 25 = el mismo solver/render con controles live; 26–29 reservadas. Se mantienen los mapeos de escena del canal 10 y `rays.width = 0.014` m. No se escribió una coreografía MIDI para la 25.
+- El runtime vive en `vendor/radiance`, con dependencias propias; `npm ci` ejecuta su instalación desde lockfile mediante `postinstall`. Un solo Engine decide qué motor trabaja. La transferencia 24→25 conserva población y drena el Worker antes de quitar director, geometría y gestos; entrar directamente en 25 comienza vacío.
+- `fluids.html` conserva el editor del timeline como cliente de la salida `vis-salida`. Documento/revisión bajo `vis.radiance.show.v1`, separado de Settings y Mapper. Audio local requiere un clic en Output; modo `silent` = reloj libre desde cue, sin seguimiento de posición de Ableton. Pausa conserva física; fin del track congela el cierre; master/blackout sólo afectan imagen.
+- Referencia recuperada de Downloads: 152,694 s, 256 eventos, 400 claves y 0 gestos. No se confirmó si existe una sesión original de navegador posterior; se puede importar otro export sin resembrar. Origen `heidi` intacto y copia completa verificada por SHA-256. Backups: `17ff81a` en este repo y `e91ec3b` en la copia Radiance.
+- Se reemplazó la dependencia del reset original en 0,05 s por reset explícito antes del cue 24: el arranque genérico podía tener 20.000 partículas y saltarse ese evento inicial.
+- Verificación final: 198 tests Radiance + 8 transporte + 4 preview = 210 aprobados; TypeScript y build aprobados. Tres pasadas de producción a 60,001 FPS, máximo 17,9 ms y ningún intervalo >20 ms. Regresión 1–23 y siete pruebas funcionales del editor aprobadas. La física baja hasta 42,45 Hz en ventanas de 1 s (Worker hasta 36,4 ms): no cumple todavía el mínimo estricto. Se preservaron los tres subpasos. [Resultados y límites](docs/integracion-radiance/RENDIMIENTO.md).
+- Preview corregido: transfiere ImageBitmap y codifica JPEG 672×252 a 2 Hz en Worker con OffscreenCanvas; no crea otro solver. Las lanes sólo se redibujan al cambiar datos visuales. Prueba final: 427 frames a 60,001 FPS, máximo 18,6 ms, ninguno >20 ms y 15/15 capturas sin errores; captura CPU máxima 0,3 ms tras preparación. La medición anterior (44,4 ms) queda conservada en el reporte.
+
 ## Fase 0
 
 - `editor.html` se creó como placeholder vacío (el editor real es Fase 2) porque `vite.config.js`

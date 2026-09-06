@@ -4,6 +4,10 @@ Visuales en tiempo real (WebGPU / three.js + TSL) para la pantalla LED de 8 × 3
 (**2688 × 1008 px**). Controlado por MIDI desde Ableton y por OSC.
 El plan completo del proyecto está en `../../PLAN.md`; los desvíos y decisiones, en `NOTAS.md`.
 
+**Fluids integrado:** la escena **24** reproduce el timeline completo de **152,694 s** y la **25** habilita el mismo motor para MIDI/OSC en vivo. Se seleccionan con las notas existentes **24/25 del canal 10**; 26–29 siguen reservadas. El editor de curvas, eventos, gestos y waveform está en **`fluids.html`**, accesible también desde `editor.html`. La integración funcional está verificada: tres pasadas de producción y la prueba final con preview presentaron a 60 FPS sin intervalos >20 ms. **La física sí bajó de 50 Hz en algunas ventanas.** 210 tests, TypeScript y build aprobados. [Resultados y límites](docs/integracion-radiance/RENDIMIENTO.md).
+
+Para instalar desde los lockfiles, ejecutar **`npm ci`**: su `postinstall` prepara también las dependencias aisladas de Radiance. Antes del cue 24, hacer clic en **Armar audio de Fluids en la ventana de salida** (`vis-salida`). El modo local reproduce el WAV; **Audio en Ableton** usa un reloj local iniciado por el cue, sin sincronización absoluta con Ableton. [Guía de operación, controles, respaldos y validaciones](docs/integracion-radiance/OPERACION.md).
+
 ---
 
 ## 1. Preparar la máquina (una sola vez)

@@ -1,28 +1,49 @@
-# Integración de Radiance desde la escena 24
+﻿# Integración de Radiance desde la escena 24
 
-Fecha: 2026-09-06. Estado: **plan de implementación; copia y recuperación del export realizadas**.
+Fecha: 2026-09-06. Estado: **integración funcional, presentación de producción y preview verificados; presupuesto estricto de física no cumplido durante toda la pieza**.
+
+[Guía de operación: armado de audio, editor, controles live, respaldo y resultados](OPERACION.md).
 
 El contenido principal a integrar es **Fluids, el show con timeline propio**, dentro de la salida y los controles de `particlesvideo/visuales`. Se conserva el proyecto Radiance completo para poder incorporar después Tres Masas, Depth Sorter, Bloques y Voronoi. Las escenas 1–23 deben conservar su funcionamiento y aspecto, incluidos los últimos ajustes de piso, rayos y torbellino.
 
 **Asignación confirmada por Manuel:** entrar en **escena 24 da PLAY a la escena completa ya escrita en el timeline**; la **escena 25 usa el mismo motor de fluidos 2D para control en vivo por MIDI**, cuyos comportamientos se definirán después. El timeline conserva su editor, curvas y eventos como una unidad dentro de la 24. Sus secciones internas no ocupan las escenas 25 en adelante.
+
+### Estado de ejecución
+
+Ya existen el runtime compartido, el transporte/documento bajo autoridad de Output, la conmutación de motores, los controles live y el editor remoto `fluids.html`. Se conserva el ancho de rayos de Parte 1 en **0,014 m**, y las notas existentes de escenas **24/25 en canal MIDI 10**. No se agregó una coreografía musical a la 25 ni se asignó contenido a 26–29.
+
+Respaldos previos: **`17ff81a` en el repositorio `particlesvideo`**, y **`e91ec3b` en la copia `radiance-live-show`**, con el export recuperado. El proyecto original de `heidi` permanece sin modificaciones.
+
+| Validación | Estado actual |
+|---|---|
+| Código del paquete Radiance | 198 tests aprobados. |
+| Transporte/documento integrado | 8 tests aprobados; igualdad completa del JSON publicado comprobada. |
+| Preview, tipos y compilación | 4 tests del preview aprobados; total 210. TypeScript y build de producción aprobados. |
+| Tres pasadas completas de producción | 9.156 / 9.156 / 9.155 frames activos a 60,001 FPS; p99 17,1 ms; máximo global 17,9 ms; ningún intervalo >20 ms. |
+| Física en las tres pasadas | Promedios 58,52 / 57,13 / 57,94 Hz; menores ventanas de 1 s 50,95 / 42,45 / 45,49 Hz. No cumple el mínimo estricto de 50 Hz durante toda la pieza. |
+| Regresión de 1–23 y cambios entre motores | Aprobados. 20/21 con y sin rayos: cuatro casos de 601 frames a ~60 FPS, máximo global 18,5 ms y ninguno >20 ms. |
+| Editor de producción | Siete pruebas funcionales aprobadas: documento/lanes, transporte, edición/ACK/deshacer, ruta MIDI, cancelación durante drenaje, preview y DPR. |
+| Rendimiento del preview | Corregido: 427 frames a 60,001 FPS, p99 17,2 ms, máximo 18,6 ms y ningún intervalo >20 ms. 15/15 capturas completadas; máximo CPU de captura 0,3 ms tras preparación. |
+
+La presentación cumplió el presupuesto medido; eso no basta para declarar resuelto el requisito de cero retrasos: el solver WASM registra pasos de hasta 36,4 ms y snapshots de hasta 38,2 ms. Se mantienen los tres subpasos y la física del show escrito. La fase de rendimiento sigue abierta por ese límite físico. [Resultados detallados](RENDIMIENTO.md). La última sesión original de navegador sigue sin compararse; se puede importar un export posterior sin resembrar el snapshot recuperado.
 
 ## 1. Lo que ya quedó conservado
 
 | Elemento | Estado |
 |---|---|
 | Proyecto de origen | `C:/Users/mpale/OneDrive/Desktop/heidi/radiance-live-show` |
-| Copia completa en este workspace | [radiance-live-show](radiance-live-show/) |
+| Copia completa en este workspace | [radiance-live-show](../../../../radiance-live-show/) |
 | Revisión de origen | `18998e4bd48558b88013c2242194001ed33923dc`; árbol limpio al inspeccionarlo |
 | Archivos copiados | 6.254; 270.335.588 bytes; incluye `.git`, `.github`, código, recursos, documentación, herramientas, dependencias y `dist` |
 | Verificación | SHA-256 de cada archivo de origen contra la copia: ninguna diferencia |
 | Export encontrado | `C:/Users/mpale/Downloads/fluids.show.json`, fecha local de modificación 06/09/2026 01:19:47 |
-| Export recuperado en la copia | [public/show/fluids.show.json](radiance-live-show/public/show/fluids.show.json) |
+| Export recuperado en la copia | [public/show/fluids.show.json](../../../../radiance-live-show/public/show/fluids.show.json) |
 | Contenido del export | 152,694 segundos; 256 eventos; 400 claves en curvas; 0 clips de gesto |
 | Validación del export | Parseado con `parseShowDoc` del proyecto; copia verificada por SHA-256 |
 
 El JSON recuperado es una **adición explícita a la copia**: no existía en `public/show` del origen. La copia del repositorio conserva sus 6.254 archivos originales y suma este documento. El proyecto de `heidi` permanece como origen separado.
 
-Registro de procedencia: [integracion-radiance/estado-copia.json](integracion-radiance/estado-copia.json).
+Registro de procedencia: [integracion-radiance/estado-copia.json](estado-copia.json).
 
 ### Estado que puede seguir solamente en el navegador
 
@@ -51,15 +72,15 @@ El README genérico de Radiance describe una salida **3360×1008**. Ese tamaño 
 
 Piezas reutilizables, ya separadas de React:
 
-- [FluidScene.ts](radiance-live-show/src/scenes/fluid/FluidScene.ts): ciclo de vida del motor, documento, gestos y render de Fluids.
-- [FluidsShowDirector.ts](radiance-live-show/src/scenes/fluid/FluidsShowDirector.ts): evaluación del documento por tiempo absoluto.
-- [show-doc.ts](radiance-live-show/src/fluids-show/show-doc.ts): formato JSON y muestreo de curvas/eventos.
-- [audio-transport.ts](radiance-live-show/src/fluids-show/audio-transport.ts): reproducción y reloj del audio.
-- [FluidsEditorApp.tsx](radiance-live-show/src/fluids-show/FluidsEditorApp.tsx) y sus lanes: edición, undo/redo, importación y exportación.
+- [FluidScene.ts](../../../../radiance-live-show/src/scenes/fluid/FluidScene.ts): ciclo de vida del motor, documento, gestos y render de Fluids.
+- [FluidsShowDirector.ts](../../../../radiance-live-show/src/scenes/fluid/FluidsShowDirector.ts): evaluación del documento por tiempo absoluto.
+- [show-doc.ts](../../../../radiance-live-show/src/fluids-show/show-doc.ts): formato JSON y muestreo de curvas/eventos.
+- [audio-transport.ts](../../../../radiance-live-show/src/fluids-show/audio-transport.ts): reproducción y reloj del audio.
+- [FluidsEditorApp.tsx](../../../../radiance-live-show/src/fluids-show/FluidsEditorApp.tsx) y sus lanes: edición, undo/redo, importación y exportación.
 
 Seleccionar solamente el look `fluids-show` no reproduce el show guardado: el adaptador también debe inyectar `setFluidsShowDoc(doc)`, tiempo y estado de reproducción.
 
-## 3. Arquitectura propuesta
+## 3. Arquitectura implementada
 
 **Una salida, una autoridad de control y un único motor visual trabajando por frame.**
 
@@ -67,13 +88,9 @@ Seleccionar solamente el look `fluids-show` no reproduce el show guardado: el ad
 
 ### Runtime de Fluids
 
-Crear `RadianceFluidRuntime` que exponga preparación, entrada, frame, cambio de modo de control, suspensión y liberación. Comparte motor, Worker y canvas entre dos controladores: `timeline` en la 24 y `midi` en la 25. Su arranque en modo timeline adapta las APIs existentes:
+Implementado `vendor/radiance/src/integration/FluidRuntime.ts`: un solver WASM, un renderer HRC y un canvas de 2688×1008, sin bucle, audio ni persistencia propios. Reutiliza el director, geometría, solver y renderer de Fluids. `RadianceController` prepara el runtime, coordina la entrada en 24/25 y recibe órdenes de MIDI/OSC/editor. `ShowSession` es dueña del documento, revisión, audio y tiempo absoluto.
 
-1. Crear un host/canvas dedicado dentro de `#stage`.
-2. Inicializar `FluidScene` y redimensionarlo a `STAGE.width/height`.
-3. Inyectar el documento recuperado y entrar en el look `fluids-show`.
-4. Entregar a cada frame `fluidsShowTime`, `fluidsShowPlaying`, ganancia de geometría, calidad y dimensiones.
-5. Usar `EMPTY_AUDIO` en el show escrito, como hace el editor original; la modulación por micrófono del catálogo queda disponible para una incorporación posterior.
+La 24 recibe el documento y usa el `FluidsShowDirector` original. La 25 quita ese director y sus geometrías/gestos para recibir controles live. La transferencia espera el trabajo despachado al Worker antes de cambiar de modo. Se conserva la población al pasar 24→25; una entrada directa en 25 comienza vacía.
 
 Enviar el documento sólo cuando cambia su revisión. `setDoc()` prepara integrales sobre toda la duración; no debe ejecutarse por frame.
 
@@ -89,7 +106,7 @@ En modo MIDI, los parámetros y acciones llegan desde `Params` y `Mapper` al mis
 
 ### Cargas y cambios asíncronos
 
-`SceneManager.goto()` es síncrono y no espera los hooks de entrada. Introducir un coordinador de transición que prepare el runtime y confirme cuándo puede mostrarse. Debe manejar:
+`SceneManager.goto()` sigue siendo síncrono. `RadianceController` intercepta 24/25 antes de modificar presets, prepara el runtime y confirma la entrada con una cola de cambios y un identificador de solicitud. Maneja:
 
 - Estados `preparing / ready / active / suspended / error`.
 - Solicitudes repetidas a la escena actual o pendiente sin redisparar el show.
@@ -97,13 +114,13 @@ En modo MIDI, los parámetros y acciones llegan desde `Params` y `Mapper` al mis
 - Vuelta a una escena de Parte 1 sin que aparezca tardíamente el canvas de Fluids.
 - Preparación de WASM, Worker, recursos y shaders antes del cue crítico, idealmente durante el armado inicial del show.
 
-La transición 23→24 se plantea como salida a negro, cambio del motor activo y entrada de Fluids. El inicio temporal de Fluids se define en relación con ese cambio: si el audio lo controla el programa, empezar `t=0` al abrir la entrada; si el audio es externo, respetar su tiempo y compensar el cue de transición. No esconder los primeros eventos porque el fundido arrancó tarde.
+Al entrar en 24, el coordinador espera que termine el frame anterior, reinicia explícitamente el solver/director/radiancia y empieza el transporte en cero antes de mostrar el primer frame. Si falta activar audio local, conserva la solicitud pendiente. Un cambio posterior a otra escena invalida esa solicitud. El modo sin audio también comienza en cero con el cue; no interpreta posición externa de Ableton.
 
 ### Dependencias y recursos
 
-Mantener la copia completa como referencia y extraer un paquete de runtime dentro de `particlesvideo/visuales`, con dependencias resueltas desde el lockfile de Radiance. Aislar las importaciones de su Three mediante paquete/bundle ESM propio; no actualizar globalmente Three 0.176.0 de Parte 1.
+La copia completa permanece como referencia. El destino contiene todo `src`, lockfile y configuración de Radiance en `vendor/radiance`, y sus recursos públicos bajo `public/radiance`. La resolución local mantiene separadas sus dependencias y Three 0.176.0 de Parte 1. `npm ci` en Visuales ejecuta `npm ci --prefix vendor/radiance` mediante `postinstall`; el build no necesita el repositorio original ni el servidor 4180.
 
-Vite actual puede consumir TypeScript del adaptador, pero la comprobación de tipos de Radiance debe conservarse con su configuración separada. El origen declara Node 22 y usa Vite 7; no copiar su `package.json` encima del de Parte 1 ni cambiar el toolchain del show incidentalmente. Resolver reproducibilidad del paquete antes de integrarlo.
+Vite actual consume el TypeScript del adaptador; Radiance conserva su comprobación de tipos y herramientas en su configuración separada. El origen declara Node 22 y usa Vite 7. Su `package.json` no reemplaza al de Parte 1. La instalación reproduce ambos lockfiles y `npm run check:radiance` ejecuta las comprobaciones del paquete y del transporte integrado.
 
 Servir recursos bajo un prefijo, por ejemplo `/radiance/`, y sustituir rutas absolutas del origen mediante un resolvedor de assets. Incluir Worker, JS/WASM del solver, audio, análisis, documento, texturas y avisos de procedencia. Verificar también el build de producción: que el Worker encuentre el WASM no puede depender del servidor 4180 ni del directorio `heidi`.
 
@@ -124,6 +141,7 @@ Las notas de escena ya existen en canal 10: nota 24 selecciona la 24 y nota 25 s
 - Entrar desde otra escena prepara/reinicia el show y da PLAY desde `t=0`. No requiere después otro mensaje de play. La preparación previa debe permitir que empiece en el cue, según la política de audio definida en §5.
 - Conservar completo el timeline, incluyendo sus curvas, eventos, colores, gestos disponibles, editor y navegación de ensayo. Es automatización del motor en tiempo real, no un video que reemplace al solver.
 - Reiniciar debe rearmar explícitamente director, población del solver, estado temporal del render y transporte. `seek(0)` conserva historia física, y repetir `enter('fluids-show')` no garantiza un reset del mismo look. Adaptar y comprobar `resetFluidsShow()` para esta operación.
+- El runtime integrado hace ese reset antes de comenzar: el arranque genérico original podía crear 20.000 partículas y depender de un evento en 0,05 s que el primer salto de tiempo podía omitir. Se conservó el evento del documento y se agregó el reset explícito de entrada.
 - Una nota repetida mientras la 24 ya está activa no vuelve a iniciar la pieza. `fluids.restart` queda como acción explícita de ensayo.
 - Las acciones MIDI de performance preparadas para la 25 no alteran el contenido escrito de la 24. Los controles globales de escena, master y blackout siguen disponibles.
 - Al terminar el timeline, detener su transporte y conservar el cierre previsto. No entrar automáticamente en la 25: la 25 se selecciona como las demás escenas del show.
@@ -133,7 +151,7 @@ Las notas de escena ya existen en canal 10: nota 24 selecciona la 24 y nota 25 s
 - Mantener el solver, el renderer y el canvas de fluidos 2D; cambiar la fuente de control a `Params`/`Mapper`.
 - Al entrar, detener el transporte local y desacoplar director, automatizaciones, eventos pendientes y gestos del timeline. Con reloj externo, dejar de aplicarlo al visual sin detener Ableton.
 - Una pausa en el último tiempo de la 24 no constituye modo MIDI: también hay que quitar las fuerzas/emisores/luces temporales que el director dejó activos y establecer la base del modo en vivo.
-- Propuesta inicial de continuidad: 24→25 conserva las partículas existentes mientras entrega el control a MIDI. Si se entra directamente en la 25 desde Parte 1, inicializar una base propia de ensayo. El aspecto inicial definitivo y los efectos por nota los definirá Manuel; no se presupone una coreografía nueva.
+- Continuidad implementada: 24→25 conserva las partículas existentes mientras entrega el control a MIDI. Entrar directamente desde Parte 1 comienza vacío; una ráfaga `fluids.live.burst` o el parámetro `fluids.live.emission` generan partículas. Los efectos por nota se definirán después; no se escribió una coreografía nueva.
 - El cambio de look actual llama a `stopFluidsShow()` y resetea partículas, materiales y radiancia. Implementar una transferencia de control específica si se conserva la continuidad; no asumir que llamar al modo manual existente deja intacta la simulación.
 - Vaciar interacciones y pasos pendientes del Worker al cambiar de controlador. `cancelQueuedStep()` no cancela un paso ya enviado: cerrar ese paso y su respuesta antes de iniciar el primer paso MIDI, evitando que una respuesta tardía reactive órdenes del timeline. Mantener un único Worker.
 - Preparar controles mapeables de emisión, posición y color de emisores, fuerzas, gravedad, viscosidad, luz e impulsos que el motor permita. Las notas/CC y sus comportamientos concretos se asignarán después; no convertir este objetivo en reactividad obligatoria por micrófono ni reutilizar arbitrariamente los golpes del show actual.
@@ -149,7 +167,7 @@ Los marcadores y seeks quedan como herramientas internas del timeline para ensay
 
 La salida actual continúa siendo dueña del estado. `Params` contiene controles y acciones live; el documento complejo vive en un almacén versionado separado, también bajo autoridad de la salida. `vis-bus` se amplía para edición y estado del timeline. La escena selecciona un único controlador del motor: timeline en 24, MIDI en 25.
 
-Operaciones propuestas, a registrar y documentar durante implementación:
+Operaciones implementadas:
 
 | Operación | Propósito |
 |---|---|
@@ -157,7 +175,7 @@ Operaciones propuestas, a registrar y documentar durante implementación:
 | Entrada en escena 24 | Reiniciar y dar PLAY a la pieza completa; conservar protección contra notas repetidas |
 | Entrada en escena 25 | Desacoplar timeline y habilitar control MIDI del mismo motor |
 | `fluids.play`, `fluids.pause`, `fluids.restart` | Transporte y ensayo de la 24; reiniciar es distinto de recibir la nota de la escena activa |
-| `fluids.seek(seconds)` / `fluids.cue(id)` | Navegación interna del timeline de la 24, sin cambiar la escena global |
+| `fluids.seek` con segundos y loop del editor | Navegación interna del timeline de la 24, sin cambiar la escena global; no hay una acción `fluids.cue` |
 | `fluids.document` + revisión, por bridge | Enviar un documento editado/importado sin convertirlo en cientos de mensajes por frame |
 | Telemetría de tiempo, sección, duración y preparación | Playhead y diagnóstico del editor |
 | Controles de ganancia/calidad necesarios | Integración con master y presupuesto de rendimiento |
@@ -165,36 +183,38 @@ Operaciones propuestas, a registrar y documentar durante implementación:
 
 La selección de escena resuelve la precedencia: las curvas gobiernan la 24 y los controles live gobiernan la 25. Si más adelante se pide intervenir MIDI sobre la pieza escrita, añadir trims explícitos como una función nueva. Conservar ahora el documento de la 24 intacto y persistir por separado los ajustes y mapeos de la 25.
 
-El timeline original se adapta como vista del editor actual: conserva lanes, waveform, edición, undo/redo, gestos e import/export. Sus componentes dejan de crear un motor visual y un transporte independientes. El refresco del playhead puede interpolar datos del reloj, pero no gobierna la música.
+El editor remoto `fluids.html`, enlazado desde `editor.html`, conserva lanes, waveform, edición, undo/redo, gestos e import/export. No crea otro motor visual ni reproduce audio. La salida se identifica como `vis-salida` y publica estado/revisiones; un reemplazo basado en una revisión vieja se rechaza. El documento se guarda en `vis.radiance.show.v1`; los valores live y mapeos se conservan por Settings/Mapper, separados del timeline y de las claves originales del navegador.
 
-Separar pausa musical de congelación visual: en el original `fluidsShowPlaying=false` detiene reloj/emisión, pero puede continuar la física. Conservar ese comportamiento para paridad y exponer una suspensión explícita si hace falta congelar todo. El master y blackout actuales controlan imagen; no hacer que silencien audio por copiar el comportamiento de otra interfaz sin definirlo antes.
+La pausa musical mantiene el comportamiento del original: detiene reloj/emisión temporal, pero puede continuar la física. El final natural sí congela el cierre y mantiene la escena 24 seleccionada. Master y blackout controlan sólo la imagen, sin silenciar el audio.
 
-### Decisión de reloj pendiente
+### Modos de reloj implementados
 
-Se consultó si el audio lo reproduce Ableton o este programa. La arquitectura admite ambos; antes de implementar reproducción hay que seleccionar uno:
+- **Local, por defecto:** `ShowSession` precarga/decodifica `fluids.wav` y prepara waveform sin esperar `AudioContext.resume()`. El operador arma audio con un clic real en la salida; después la 24 reproduce siguiendo `AudioContext.currentTime`.
+- **Silent, explícito:** no reproduce el WAV. Usa tiempo absoluto de `performance.now()` desde el cue de inicio para acompañar audio externo. No recibe posición de Ableton, no sigue sus seeks/pausas y no corrige deriva. La sincronización externa absoluta queda como trabajo futuro, no como una capacidad ya implementada.
 
-- **Audio en el programa:** reutilizar `AudioTransport` y `fluids.wav`, con `AudioContext.currentTime` como reloj. Armar audio mediante un gesto en la ventana propietaria antes de que lleguen cues MIDI; `BroadcastChannel` no transfiere la activación del usuario.
-- **Audio en Ableton:** Fluids no reproduce otra copia del WAV. Añadir un transporte externo con tiempo absoluto, estado play/stop, offset del comienzo de este bloque y tratamiento de seek. OSC es una vía disponible; MIDI Clock por sí solo aporta tempo/pulsos, no una posición absoluta fiable del track. Una única nota de inicio tampoco corrige deriva ni relocalizaciones posteriores.
-
-Para probar paridad inicialmente se puede usar el transporte local original. Eso no decide qué equipo reproducirá el audio durante el show final. En ninguno de los modos usar `Engine.time` limitado como reloj musical.
+Cambiar de modo pausa el transporte. Ninguno usa `Engine.time` limitado como reloj musical. La elección operativa para el show final sigue disponible en el selector del editor y en `fluids.audioMode`.
 
 ## 6. Fases y criterios de aceptación
 
 | Fase | Trabajo | Debe quedar comprobado |
 |---|---|---|
-| 0 — Conservación | **Copia completa y export recuperado ya hechos.** Comparar con la sesión de navegador y fijar versión del documento | Curvas, eventos, colores y posibles gestos más recientes conservados; assets y hashes registrados |
-| 1 — Referencia | Importar explícitamente el JSON recuperado en `/fluids`, o abrir la copia con un origen/perfil aislado; capturas en hitos y medición del track completo | Documento/revisión identificados: el localStorage original tiene prioridad sobre el JSON servido y no debe sustituir inadvertidamente la referencia; conservarlo sin borrar |
-| 2 — Runtime aislado | Crear paquete/adaptador Fluid con controladores timeline/live, resolver dependencias y rutas Worker/WASM, mantener el contrato de frame externo | Arranca desde el proyecto destino, con el origen de `heidi` y servidor 4180 fuera de uso; un único solver y loop visual |
-| 3 — Entrada en 24 | Añadir coordinador de preparación/transición y alternancia Parte 1/Fluids | 23→24 y 24→1/20/23 funcionan; el motor inactivo no consume frames ni deja audio local reproduciéndose; notas repetidas y cargas canceladas son seguras |
-| 4 — Timeline completo en 24 | Conectar documento, reloj seleccionado, editor, transporte, persistencia e import/export | Entrar en 24 da PLAY a la pieza completa; editor y timeline conservados; notas repetidas no reinician ni las acciones live cambian lo escrito |
-| 5 — Motor MIDI en 25 | Cambiar de controlador sobre el mismo runtime, definir base live y exponer parámetros/acciones para los mapeos posteriores de Manuel | 24→25 desactiva toda automatización del timeline; MIDI modifica el motor sin escribir en el documento; 25→24 restaura y reproduce la pieza original |
-| 6 — Rendimiento y regresión | Medir show completo, transiciones, ráfagas y memoria; ejecutar pruebas de ambos proyectos | Cumple presupuesto de frame y mantiene aspecto/controles de escenas 1–23 |
+| 0 — Conservación | Copia, hashes y export recuperado completos; backups `17ff81a`/`e91ec3b` | Última sesión de navegador original todavía no comparada; se puede importar un export posterior. |
+| 1 — Referencia | Snapshot publicado validado; identidad completa comprobada por test | Tres pasadas completas medidas y capturas de referencia conservadas; posible sesión original posterior sin comparar. |
+| 2 — Runtime aislado | Implementado con código/lockfile/assets locales y un solo solver/render | Arranque de producción y funcionamiento sin motor duplicado comprobados. |
+| 3 — Entrada en 24 | Coordinador, preparación, espera de audio y cancelación implementados | Cambios entre motores, notas repetidas y cancelación durante drenaje aprobados. |
+| 4 — Timeline completo en 24 | Documento, relojes, editor, revisiones, persistencia e import/export implementados | Tres pasadas, pruebas funcionales del editor y rendimiento del preview aprobados. |
+| 5 — Motor MIDI en 25 | Cambio de controlador, continuidad de población y controles live implementados | Transferencia, entrada directa y ráfaga por Mapper aprobadas sin editar documento; coreografía artística futura por definir. |
+| 6 — Rendimiento y regresión | Presentación, preview y regresión 1–23 aprobados; 210 tests, TypeScript y build aprobados | Física por debajo de 50 Hz en algunas ventanas. El criterio completo no se cumplió; fase abierta por esa limitación. |
 
-La implementación comienza por cerrar el documento de referencia y extraer Fluid. Primero comprobar paridad del timeline completo en la 24; después habilitar el modo MIDI de la 25. El diseño detallado de sus reacciones se realizará con las próximas indicaciones de Manuel.
+La implementación de ambas escenas y las verificaciones funcionales ya están completas. El límite de rendimiento que permanece es la frecuencia de actualización de la física densa; el preview corregido ya fue medido y aprobado. El diseño detallado de las reacciones MIDI de la 25 se realizará con las próximas indicaciones de Manuel.
 
 ## 7. Presupuesto de rendimiento
 
-Objetivo: 60 FPS y **presupuesto máximo de 20 ms por frame** para cumplir el mínimo solicitado de 50 FPS. Todavía no se ha medido la integración: los resultados de Parte 1 no demuestran el rendimiento de Fluids.
+Objetivo: 60 FPS y **presupuesto máximo de 20 ms por frame** para cumplir el mínimo solicitado de 50 FPS. Medido en i7-12700 + RTX 3090, salida 2688×1008 nativa 1×, calidad high/HRC 1024: las tres pasadas presentaron a 60,001 FPS, máximo 17,9 ms y ningún intervalo >20 ms. Se excluyeron del análisis los frames posteriores a 152,694 s, cuando el cierre queda congelado.
+
+La física promedió 58,52 / 57,13 / 57,94 actualizaciones/s, pero bajó a 50,95 / 42,45 / 45,49 en sus peores ventanas de 1 s. p95 de paso Worker: 20,1 / 22,0 / 20,8 ms; máximos 32,7 / 36,4 / 33,3 ms; edad máxima de snapshot 31,4 / 38,2 / 32,2 ms. **No se cumplió el mínimo de 50 Hz de física durante toda la pieza.** El render puede reutilizar respuestas mientras llega un nuevo paso; por eso 60 FPS no demuestra ausencia de atraso de simulación.
+
+Los buffers se reciclan y se conservan tres subpasos para preservar el show escrito. No se atribuye este resultado exclusivamente a aplicaciones externas ni se promete una solución transparente cambiando población o física. El preview inicial superó 20 ms; corregido, presentó 427 frames a 60,001 FPS con máximo 18,6 ms y ninguno >20 ms. Usa ImageBitmap y JPEG 672×252 a 2 Hz codificado en Worker con OffscreenCanvas, sin otro solver. Las lanes se redibujan sólo al cambiar sus datos visuales, sin repintar por cada actualización de tiempo/estadísticas.
 
 - Medir a 2688×1008 sobre la RTX 3090, con la carga de aplicaciones prevista para el show.
 - Comenzar por render nativo 1× y comprobar paridad; la página original usa supersampling adaptable desde 2×. Activarlo en la salida sólo si la medición deja margen. Una reducción visual debe quedar identificada y comparada.

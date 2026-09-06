@@ -15,8 +15,10 @@ import { Bridge } from './io/Bridge.js';
 import { STAGE } from './config/stage.js';
 import { SCENES } from './scenes/index.js';
 import { BASE } from './scenes/base.js';
+import { RadianceController } from './radiance/RadianceController.js';
 
 async function boot() {
+  window.name = 'vis-salida';
   const { renderer, view } = await createRenderer();
   console.info('[vis] WebGPU listo · backend', renderer.backend.constructor.name);
 
@@ -26,6 +28,7 @@ async function boot() {
   SceneManager.defineParams(params, SCENES);
   Layer2D.defineParams(params);
   Layer3D.defineParams(params);
+  RadianceController.defineParams(params);
 
   const ctx = { params, stage: STAGE, renderer, scenes: null, mapper: null, bridge: null, settings: null };
 
@@ -50,6 +53,12 @@ async function boot() {
   const engine = new Engine(ctx, { layer2d, layer3d, compositor });
   engine.sim = layer3d.sim;
   engine.initFpsOverlay();
+  ctx.engine = engine;
+  const radiance = new RadianceController(ctx, view);
+  ctx.radiance = radiance;
+  // Preparar shaders, Worker, WASM y WAV antes de habilitar los cues del show.
+  // Un fallo de Radiance se informa y permite seguir operando las escenas 1–23.
+  await radiance.prepare().catch(() => {});
 
   // IO: todo lo que entra pasa por el Mapper, que solo escribe en Params.
   const mapper = new Mapper(ctx);

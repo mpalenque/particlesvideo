@@ -37,6 +37,7 @@ export class Bridge {
   post(obj) { this.channel.postMessage(obj); }
 
   _onMessage(m) {
+    if (m?.t?.startsWith('fluids:')) { void this.ctx.radiance?.receive(m); return; }
     switch (m.t) {
       case 'hi': this.post(this.hello()); break;
       // Todo lo que se toca en el editor queda guardado al instante, sin apretar nada.
@@ -70,6 +71,7 @@ export class Bridge {
   // Lo llama el Engine al final de cada frame.
   tick(engine) {
     const now = performance.now();
+    this.ctx.radiance?.tick(now);
     if (now - this._lastValues >= 100) {          // valores 10 Hz, solo los que cambiaron
       this._lastValues = now;
       const dirty = this.params.consumeDirty();

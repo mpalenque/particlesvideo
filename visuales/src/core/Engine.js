@@ -54,6 +54,11 @@ export class Engine {
     clearInterval(this._watchdog);
   }
 
+  whenIdle() {
+    if (!this._busy) return Promise.resolve();
+    return new Promise(resolve => (this._idleWaiters ??= []).push(resolve));
+  }
+
   async _tick() {
     if (this._busy) return;          // no encimar frames si la GPU se atrasa
     this._busy = true;
@@ -65,28 +70,42 @@ export class Engine {
     try {
       this.params.update(dt);
       this.scenes.update(dt);
-      this.layer2d.update(dt, this.time);
-      this.layer3d.update(dt, this.time);
+      if (this.ctx.radiance?.ownsFrame) {
+        this.simMs = 0;
+        const tRender = performance.now();
+        this.ctx.radiance.frame(t0, dt);
+        this.renderMs = performance.now() - tRender;
+      } else {
+        this.layer2d.update(dt, this.time);
+        this.layer3d.update(dt, this.time);
 
-      const tSim = performance.now();
-      if (this.sim) await this.sim.update(dt);
-      this.simMs = performance.now() - tSim;
+        const tSim = performance.now();
+        if (this.sim) await this.sim.update(dt);
+        this.simMs = performance.now() - tSim;
 
-      const tRender = performance.now();
-      this.compositor.update();
-      await this.compositor.render();
-      this.renderMs = performance.now() - tRender;
+        const tRender = performance.now();
+        this.compositor.update();
+        await this.compositor.render();
+        this.renderMs = performance.now() - tRender;
+      }
     } catch (err) {
       console.error('[vis] error en el frame', err);
       this.stop();
     }
 
-    this.frameMs = performance.now() - t0;
-    this._lastFrameAt = performance.now();
-    // El límite protege la física; los FPS cuentan el tiempo real, incluso en un tirón.
-    this._updateFps(elapsed);
-    this.ctx.bridge?.tick(this);
-    this._busy = false;
+    try {
+      this.frameMs = performance.now() - t0;
+      this._lastFrameAt = performance.now();
+      // El límite protege la física; los FPS cuentan el tiempo real, incluso en un tirón.
+      this._updateFps(elapsed);
+      this.ctx.bridge?.tick(this);
+    } catch (err) {
+      console.error('[vis] error de telemetría', err);
+    } finally {
+      this._busy = false;
+      for (const resolve of this._idleWaiters ?? []) resolve();
+      this._idleWaiters = [];
+    }
   }
 
   _updateFps(dt) {

@@ -48,9 +48,10 @@ export class SceneManager {
 
   // `force` re-entra a la escena aunque ya sea la actual. Nadie lo usa en el show; está para
   // poder pedir un re-disparo a mano desde la consola (`vis.scenes.goto('10', {force:true})`).
-  goto(id, { transition, force = false } = {}) {
+  goto(id, { transition, force = false, radianceReady = false } = {}) {
     const scene = this.byId.get(id);
     if (!scene) { console.error(`[vis] escena desconocida: ${id}`); return; }
+    if (this.ctx.radiance?.requestScene(id, { transition, force, radianceReady })) return;
 
     // UNA NOTA DE LA ESCENA EN CURSO NO LA VUELVE A DISPARAR (pedido de Manuel: *"si llega una
     // nota para controlar la escena, hasta que no cambie de escena tiene que seguir en esa

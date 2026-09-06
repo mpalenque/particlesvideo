@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "npm ci --prefix vendor/radiance",
+    "check:radiance": "npm --prefix vendor/radiance run check && node --test tools/radiance-session.test.mjs tools/radiance-preview.test.mjs",
     "dev": "vite --host --port 5173",
     "build": "vite build",
     "preview": "vite preview --port 5173",
