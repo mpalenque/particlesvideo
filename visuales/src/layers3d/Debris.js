@@ -8,20 +8,31 @@ const MAX = 4000;
 // entre los dashes. Ahora se desvanecen en el aire y mueren al tocar y = 0.
 const ALTURA_FADE_M = 0.3;
 
-// Esquirlas blancas en el piso (escenas 17+). Simuladas en CPU: son pocas y baratas,
+// Esquirlas blancas en el piso (escenas 16 a 18, las de rayos). Simuladas en CPU: son pocas y
+// baratas,
 // y así rebotan y se deslizan con control fino. Todo preasignado: nada se crea por frame.
 export class Debris {
   static defineParams(params) {
     params.define({ id: 'debris.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Esquirlas', group: 'debris' });
     params.define({ id: 'debris.count', type: 'int', min: 0, max: 300, default: 60, label: 'Por impacto', group: 'debris' });
     params.define({ id: 'debris.size', type: 'float', min: 0.01, max: 0.3, default: 0.06, label: 'Tamaño (m)', group: 'debris' });
-    params.define({ id: 'debris.speed', type: 'float', min: 0, max: 8, default: 2, label: 'Velocidad (m/s)', group: 'debris' });
-    params.define({ id: 'debris.lifetime', type: 'float', min: 0.1, max: 10, default: 0.9, label: 'Duración (s)', group: 'debris' });
-    params.define({ id: 'debris.fadeFraction', type: 'float', min: 0.05, max: 1, default: 0.7, label: 'Fracción de fade', group: 'debris' });
+    params.define({ id: 'debris.speed', type: 'float', min: 0, max: 40, default: 11, label: 'Velocidad (m/s)', group: 'debris' });
+    params.define({ id: 'debris.lifetime', type: 'float', min: 0.05, max: 10, default: 0.35, label: 'Duración (s)', group: 'debris' });
+    params.define({ id: 'debris.fadeFraction', type: 'float', min: 0.05, max: 1, default: 1, label: 'Fracción de fade', group: 'debris' });
+    // Apertura del cono de salida: 0 = todas rectas para arriba, 1 = media esfera completa.
+    // "Violento hacia arriba a todos lados" es un cono ancho pero con la vertical dominando.
+    params.define({ id: 'debris.spread', type: 'float', min: 0, max: 1, default: 0.7, label: 'Apertura (0=vertical)', group: 'debris' });
+    // Frenado exponencial (1/s). Es lo que hace que la esquirla salga disparada y se plante,
+    // en vez de viajar a velocidad constante hasta que se le acaba la vida.
+    params.define({ id: 'debris.drag', type: 'float', min: 0, max: 30, default: 6, label: 'Frenado (1/s)', group: 'debris' });
     // Con false (default) las esquirlas vuelan y se apagan en el aire, sin llegar al piso.
     // El rebote y la fricción quedan disponibles por si se quiere el comportamiento viejo.
     params.define({ id: 'debris.floorCollision', type: 'bool', default: false, label: 'Choca con el piso', group: 'debris' });
-    params.define({ id: 'debris.gravity', type: 'float', min: 0, max: 20, default: 6, label: 'Gravedad', group: 'debris' });
+    // Gravedad 0 por pedido de Manuel: con gravedad la esquirla dibuja una parábola, sube un
+    // poco y CAE, y esa asíntota que baja es justo lo que no quiere. Sin gravedad salen
+    // disparadas, el frenado las planta y el fade las apaga ahí mismo. El param queda por si
+    // alguna vez se quiere el tiro parabólico de antes.
+    params.define({ id: 'debris.gravity', type: 'float', min: 0, max: 20, default: 0, label: 'Gravedad', group: 'debris' });
     params.define({ id: 'debris.bounce', type: 'float', min: 0, max: 1, default: 0.4, label: 'Rebote', group: 'debris' });
     params.define({ id: 'debris.friction', type: 'float', min: 0, max: 1, default: 0.9, label: 'Fricción', group: 'debris' });
   }
@@ -61,25 +72,38 @@ export class Debris {
     scene.add(this.mesh);
   }
 
+  // Explosión: media esfera hacia ARRIBA, no un chorro vertical ni un tiro parabólico.
+  // La dirección se saca de un ángulo polar medido desde la vertical, no de "un poco de x/z y
+  // mucho de y": así la apertura es de verdad uniforme sobre el casquete y hay esquirlas que
+  // salen casi horizontales cuando `spread` es alto, que es lo que se lee como reventón.
   burst(x, z) {
     const count = this.params.get('debris.count');
     const speed = this.params.get('debris.speed');
     const lifetime = this.params.get('debris.lifetime');
+    const spread = this.params.get('debris.spread');
+    const polarMax = spread * (Math.PI / 2);
 
     for (let n = 0; n < count; n++) {
       const i = this.cursor;
       this.cursor = (this.cursor + 1) % MAX;
 
-      const angle = Math.random() * Math.PI * 2;
-      const radial = speed * (0.3 + Math.random() * 0.7);
+      const azimut = Math.random() * Math.PI * 2;
+      // cos uniforme en [cos(polarMax), 1] reparte parejo sobre el casquete: sin esto se
+      // amontonan todas cerca del eje vertical y el cono se ve hueco en los costados.
+      const cosPolar = 1 - Math.random() * (1 - Math.cos(polarMax));
+      const sinPolar = Math.sqrt(Math.max(1 - cosPolar * cosPolar, 0));
+      // Velocidades muy dispares dentro del mismo estallido: el frente rápido se va enseguida
+      // y la cola lenta queda un instante más, que es lo que le da cuerpo a la explosión.
+      const v = speed * (0.45 + Math.random() * 0.55);
+
       this.pos[i * 3] = x;
       this.pos[i * 3 + 1] = 0.05;
       this.pos[i * 3 + 2] = z;
-      this.vel[i * 3] = Math.cos(angle) * radial;
-      this.vel[i * 3 + 1] = (0.5 + Math.random()) * speed;
-      this.vel[i * 3 + 2] = Math.sin(angle) * radial;
+      this.vel[i * 3] = Math.cos(azimut) * sinPolar * v;
+      this.vel[i * 3 + 1] = cosPolar * v;
+      this.vel[i * 3 + 2] = Math.sin(azimut) * sinPolar * v;
       this.yaw[i] = Math.random() * Math.PI * 2;
-      this.life[i] = lifetime;
+      this.life[i] = lifetime * (0.7 + Math.random() * 0.3);
       this.grounded[i] = 0;
     }
   }
@@ -91,6 +115,7 @@ export class Debris {
     this.mesh.visible = opacity > 0.001;
 
     const gravity = p.get('debris.gravity');
+    const drag = p.get('debris.drag');
     const bounce = p.get('debris.bounce');
     const friction = p.get('debris.friction');
     const size = p.get('debris.size');
@@ -111,6 +136,12 @@ export class Debris {
 
       const ix = i * 3;
       this.vel[ix + 1] -= gravity * dt;
+      // Frenado exponencial (estable con cualquier dt, a diferencia de `v *= 1 - k·dt`, que
+      // con un frame lento se pasa de largo y da velocidad negativa).
+      if (drag > 0) {
+        const k = Math.exp(-drag * dt);
+        this.vel[ix] *= k; this.vel[ix + 1] *= k; this.vel[ix + 2] *= k;
+      }
       // Solo se controla el piso mientras BAJAN: nacen a ras del suelo y suben, así que
       // mirar la altura sin más las mataría en el mismo frame en que se crean.
       const bajando = this.vel[ix + 1] < 0;

@@ -58,7 +58,8 @@ export class Engine {
     if (this._busy) return;          // no encimar frames si la GPU se atrasa
     this._busy = true;
     const t0 = performance.now();
-    const dt = Math.min(this.clock.getDelta(), MAX_DT);
+    const elapsed = this.clock.getDelta();
+    const dt = Math.min(elapsed, MAX_DT);
     this.time += dt;
 
     try {
@@ -82,7 +83,8 @@ export class Engine {
 
     this.frameMs = performance.now() - t0;
     this._lastFrameAt = performance.now();
-    this._updateFps(dt);
+    // El límite protege la física; los FPS cuentan el tiempo real, incluso en un tirón.
+    this._updateFps(elapsed);
     this.ctx.bridge?.tick(this);
     this._busy = false;
   }

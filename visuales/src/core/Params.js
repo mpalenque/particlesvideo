@@ -110,7 +110,7 @@ export class Params {
     if (!p) { console.error(`[vis] param desconocido: ${id}`); return; }
     const to = this._coerce(p, value);
     if (!this._isInterpolable(p) || !(seconds > 0)) return this.set(id, to, { immediate: true });
-    p.tween = { from: p.value, to, duration: seconds, elapsed: 0, ease: EASINGS[easing] ?? EASINGS.smooth };
+    p.tween = { from: p.value, to, duration: seconds, elapsed: 0, ease: typeof easing === 'function' ? easing : (EASINGS[easing] ?? EASINGS.smooth) };
     const changed = p.target !== to;
     p.target = to;
     if (changed) this._notifyChange(p);

@@ -7,7 +7,14 @@ export function linear(u) {
   return Math.min(Math.max(u, 0), 1);
 }
 
-export const EASINGS = { smooth: smoothstep, linear };
+// Arranca rápido y frena al llegar. Para un corrimiento disparado a mano lee mejor que
+// `smooth`, que es simétrica y por eso empieza despacio (se siente como retardo).
+export function easeOut(u) {
+  const t = Math.min(Math.max(u, 0), 1);
+  return 1 - (1 - t) ** 3;
+}
+
+export const EASINGS = { smooth: smoothstep, linear, out: easeOut };
 
 export function lerp(a, b, t) {
   return a + (b - a) * t;

@@ -45,6 +45,7 @@ async function boot() {
 
   const compositor = new Compositor(ctx, layer2d, layer3d);
   compositor.init();
+  await compositor.warmup();
 
   const engine = new Engine(ctx, { layer2d, layer3d, compositor });
   engine.sim = layer3d.sim;

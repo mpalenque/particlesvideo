@@ -1,5 +1,7 @@
 import { clamp } from '../core/Tween.js';
 
+export const MAPPINGS_VERSION = 10;
+
 // Tabla fuente → destino. Es lo único que traduce MIDI/OSC a escrituras en Params.
 export class Mapper {
   constructor(ctx) {
@@ -16,17 +18,46 @@ export class Mapper {
   async init() {
     const stored = localStorage.getItem('vis.mappings');
     if (stored) {
-      try { this.setMappings(JSON.parse(stored).mappings ?? []); return; }
+      try {
+        const saved = JSON.parse(stored);
+        const savedVersion = Number(saved.version ?? 1);
+        const mappings = saved.mappings ?? [];
+
+        // Conserva lo aprendido a mano, suma mapeos nuevos y reemplaza únicamente las filas
+        // default que declaran una corrección posterior. Así una mejora llega a la máquina del
+        // show sin obligar a restaurar y perder configuraciones propias.
+        if (savedVersion < MAPPINGS_VERSION) {
+          const defaults = await this._loadDefaultMappings();
+          const upgrades = defaults.filter((row) =>
+            (row.addedIn ?? 1) > savedVersion || (row.updatedIn ?? 0) > savedVersion);
+          for (const m of upgrades) {
+            const index = mappings.findIndex((row) => row.id === m.id);
+            if (index < 0) mappings.push(structuredClone(m));
+            else if ((m.updatedIn ?? 0) > savedVersion) mappings[index] = structuredClone(m);
+          }
+        }
+
+        this.setMappings(mappings);
+        if (savedVersion < MAPPINGS_VERSION) this.save();
+        return;
+      }
       catch { console.error('[vis] mapeos guardados inválidos, uso el default'); }
     }
     await this.resetToDefault();
   }
 
+  async _loadDefaultMappings() {
+    const res = await fetch('./mappings.default.json');
+    const json = await res.json();
+    return json.mappings ?? [];
+  }
+
   async resetToDefault() {
     try {
-      const res = await fetch('./mappings.default.json');
-      const json = await res.json();
-      this.setMappings(json.mappings ?? []);
+      this.setMappings(await this._loadDefaultMappings());
+      // Restaurar tiene que sobrevivir al próximo arranque. Antes solo cambiaba las filas en
+      // memoria y al recargar volvía el localStorage viejo, por eso el kick perdía los rayos.
+      this.save();
     } catch (err) {
       console.error('[vis] no se pudo cargar mappings.default.json', err);
       this.setMappings([]);
@@ -40,11 +71,11 @@ export class Mapper {
   }
 
   save() {
-    localStorage.setItem('vis.mappings', JSON.stringify({ version: 1, mappings: this.mappings }));
+    localStorage.setItem('vis.mappings', JSON.stringify({ version: MAPPINGS_VERSION, mappings: this.mappings }));
   }
 
   exportJson() {
-    return JSON.stringify({ version: 1, mappings: this.mappings }, null, 2);
+    return JSON.stringify({ version: MAPPINGS_VERSION, mappings: this.mappings }, null, 2);
   }
 
   onSceneChange(id) { this.currentScene = id; }
@@ -82,9 +113,14 @@ export class Mapper {
       : msg.kind === 'cc' ? { kind: 'cc', channel: msg.channel, cc: msg.cc }
       : { kind: 'osc', address: msg.address });
 
-    for (const m of this.index.get(key) ?? []) {
-      if (!this._sceneAllows(m)) continue;
-      if (this._apply(m, msg)) fired.push(m.id);
+    // Una fuente de nota sin número significa "cualquier nota de este canal". Se consulta junto
+    // con la clave exacta, por lo que los mapeos de notas individuales siguen funcionando igual.
+    const keys = msg.kind === 'note' ? [key, `note:${msg.channel}:*`] : [key];
+    for (const candidate of keys) {
+      for (const m of this.index.get(candidate) ?? []) {
+        if (!this._sceneAllows(m)) continue;
+        if (this._apply(m, msg)) fired.push(m.id);
+      }
     }
 
     this._record(msg, fired);
@@ -194,7 +230,7 @@ export class Mapper {
 
 export function sourceKey(source) {
   if (!source || !source.kind) return null;
-  if (source.kind === 'note') return `note:${source.channel}:${source.note}`;
+  if (source.kind === 'note') return `note:${source.channel}:${source.note == null ? '*' : source.note}`;
   if (source.kind === 'cc') return `cc:${source.channel}:${source.cc}`;
   if (source.kind === 'osc') return `osc:${source.address}`;
   return null;
@@ -202,7 +238,7 @@ export function sourceKey(source) {
 
 export function describeSource(source) {
   if (!source || !source.kind) return '(sin asignar)';
-  if (source.kind === 'note') return `Nota ${source.note} ch${source.channel}`;
+  if (source.kind === 'note') return source.note == null ? `Cualquier nota ch${source.channel}` : `Nota ${source.note} ch${source.channel}`;
   if (source.kind === 'cc') return `CC ${source.cc} ch${source.channel}`;
   if (source.kind === 'osc') return source.address;
   return '?';

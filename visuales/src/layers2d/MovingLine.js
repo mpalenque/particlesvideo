@@ -59,7 +59,13 @@ export class MovingLine {
     const dir = this.params.get('line.direction');
 
     let pos;
-    if (arg === undefined || arg === 'edge') pos = dir > 0 ? 0 : span;   // entra por el borde opuesto al avance
+    if (arg === undefined || arg === 'edge') {
+      // Arranca justo ADENTRO del marco. En x=0 quedaba debajo de los 10 px rojos porque la
+      // línea se dibuja detrás del frame, y durante el comienzo parecía que no existía.
+      const framed = this.params.target('frame.opacity') > 0.001;
+      const inset = framed ? this.params.get('frame.thickness') + this.params.get('line.width') / 2 : 0;
+      pos = dir > 0 ? inset : span - inset;
+    }
     else if (arg === 'center') pos = span / 2;
     else if (arg === 'random') pos = Math.random() * span;
     else pos = Number(arg);

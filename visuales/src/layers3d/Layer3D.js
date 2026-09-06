@@ -5,13 +5,14 @@ import { Floor } from './Floor.js';
 import { Lights } from './Lights.js';
 import { BoxWire } from './BoxWire.js';
 import { RedBlock } from './RedBlock.js';
+import { Orb } from './Orb.js';
 import { Rays } from './Rays.js';
 import { Debris } from './Debris.js';
 import { MlsMpmSimulator } from './particles/MlsMpmSimulator.js';
 import { StickRenderer } from './particles/StickRenderer.js';
 
 export class Layer3D {
-  static ELEMENTS = [Lights, Floor, BoxWire, RedBlock, Debris, Rays];
+  static ELEMENTS = [Lights, Floor, BoxWire, RedBlock, Orb, Debris, Rays];
 
   static defineParams(params) {
     params.define({ id: 'layer3d.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Capa 3D', group: 'layer3d' });

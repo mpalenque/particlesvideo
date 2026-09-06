@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, vec3, uint, varying, instanceIndex, mix, normalize, cross, mat3,
   normalLocal, transformNormalToView, mrt, uniform, smoothstep, float, hash, clamp,
-  abs, select, length,
+  abs, select, length, max,
 } from 'three/tsl';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STAGE } from '../../config/stage.js';
@@ -104,14 +104,23 @@ const GEO = { thickness: 0.7, length: 3 };   // extents del rounded box de la ge
 export class StickRenderer {
   constructor(ctx, sim) {
     this.params = ctx.params;
+    this.ctx = ctx;
     this.sim = sim;
     this.u = {
       scale: uniform(new THREE.Vector3(1, 1, 1)), opacity: uniform(0), bloom: uniform(1),
       baseColor: uniform(new THREE.Color('#ff0000')),
-      whiteMin: uniform(0.6), whiteMax: uniform(3.0), whiteJitter: uniform(0.6),
+      blackHalf: uniform(0), blackAll: uniform(0), blackSeed: uniform(0, 'uint'),
+      whiteEnabled: uniform(1), whiteMin: uniform(0.6), whiteMax: uniform(3.0), whiteJitter: uniform(0.6),
       ageGrow: uniform(1.2), sizeJitter: uniform(0.45), flicker: uniform(0), flickerPhase: uniform(0),
       roughness: uniform(0.55), metalness: uniform(0.0), emissive: uniform(0.15),
       taper: uniform(0.55), headTail: uniform(0.5),
+      // Halo del ORBE. La posición va en unidades de GRILLA porque es ahí donde vive
+      // `particle.position`; el objeto ya lleva la grilla a metros del escenario.
+      orbPos: uniform(new THREE.Vector3()), orbDark: uniform(0), orbRadius: uniform(1),
+      orbJitter: uniform(0.5),
+      // Techo de la caja creciendo (escena 10), en unidades de GRILLA. Igual que `orbPos`, se
+      // convierte una vez por frame en `update` porque acá `particle.position` vive en grilla.
+      growTop: uniform(1e5),
     };
     this._color = '';
     this._bloomOn = null;
@@ -142,7 +151,44 @@ export class StickRenderer {
       const speed = particle.get('speedSmooth');
       const span = u.whiteMax.sub(u.whiteMin);
       const j = hash(instanceIndex.add(uint(613))).sub(0.5).mul(u.whiteJitter).mul(span);
-      return smoothstep(u.whiteMin.add(j), u.whiteMax.add(j), speed);
+      return smoothstep(u.whiteMin.add(j), u.whiteMax.add(j), speed).mul(u.whiteEnabled);
+    };
+
+    // Máscara estable por instancia: con umbral 0.5 apaga aproximadamente la mitad. La semilla
+    // cambia en cada kick, así no quedan siempre negros los mismos palitos.
+    const blackMask = () => float(hash(instanceIndex.add(u.blackSeed)).lessThan(0.5)).mul(u.blackHalf);
+    const darkMask = () => max(max(orbHalo(), blackMask()), u.blackAll);
+
+    // Halo del orbe: 1 justo encima del orbe, 0 a partir de `orbRadius`. Es lo que hace que el
+    // orbe MODIFIQUE los palitos y no solo los mueva. La PointLight que lleva el orbe sola no
+    // alcanza: el palito mide unos 3 px de ancho y tiene emisión propia, así que el aporte de
+    // una lámpara se le pierde adentro.
+    //
+    // El halo APAGA. Primero se probó al revés —teñir hacia el color del orbe, que quedaba
+    // celeste— y Manuel lo bajó: *"que se hagan NEGROS los que son atraídos, en vez de blancos,
+    // progresivamente"*. Y tiene más sentido físico del que parece: lo que la masa hace alrededor
+    // del orbe es acelerar, y acelerar la manda al blanco por `whiteAmount`. Apagando el color y
+    // la emisión juntos, el orbe abre un AGUJERO NEGRO en la nube, con el borde todavía
+    // iluminado por su luz puntual — que sigue estando, y ahora es lo único que se ve de él.
+    //
+    // EL BORDE TIENE QUE SER DURO. La primera versión iba de 1 en el centro a 0 en el radio, o
+    // sea una campana suavísima, y medido con la masa quieta de la 10 el resultado es que TODA la
+    // masa queda un poco más gris y no se ve ningún agujero: el ojo necesita un borde para leer
+    // que falta algo. Ahora el apagado es TOTAL hasta el 55 % del radio y cae a cero en el 45 %
+    // que queda, así que hay un núcleo negro de verdad y un aro corto de transición.
+    //
+    // `smoothstep(a, b, d)` con a < b y no al revés: con los bordes invertidos el resultado queda
+    // indefinido en la especificación, así que la vuelta se hace a mano con el `1 −`.
+    //
+    // Y el radio lleva JITTER por partícula, por la misma razón que el umbral de blanco: sin él
+    // todos los palitos a la misma distancia se apagan en el mismo frame y el borde del agujero
+    // queda como una pelota de billar recortada. Con el jitter cada uno tiene su propio radio y
+    // el borde se disuelve palito por palito.
+    const orbHalo = () => {
+      const d = length(particle.get('position').sub(u.orbPos));
+      const j = hash(instanceIndex.add(uint(1481))).sub(0.5).mul(u.orbJitter).add(1);
+      const r = u.orbRadius.mul(j);
+      return float(1).sub(smoothstep(r.mul(0.55), r, d)).mul(u.orbDark);
     };
 
     // Escribe profundidad (los palitos se tapan entre sí de verdad y el GTAO tiene con qué
@@ -184,10 +230,11 @@ export class StickRenderer {
     })();
 
     // Color base de la escena, mezclado a blanco según la velocidad (pedido del storyboard).
-    // El titileo (escena 23) modula el brillo por partícula con fase propia: da la sensación
+    // El titileo (escena 22) modula el brillo por partícula con fase propia: da la sensación
     // de que la masa está por explotar en vez de parpadear toda junta.
     this.material.colorNode = Fn(() => {
-      const base = mix(u.baseColor, vec3(1, 1, 1), whiteAmount());
+      const dark = darkMask();
+      const base = mix(u.baseColor, vec3(1, 1, 1), whiteAmount()).mul(float(1).sub(dark));
       const fase = hash(instanceIndex.add(uint(977))).mul(6.2831);
       const parpadeo = float(1).sub(u.flicker).add(u.flicker.mul(u.flickerPhase.add(fase).sin().mul(0.5).add(0.5)));
       // Degradado a lo largo del palito: la cola apagada, la cabeza a pleno. Segundo indicio
@@ -197,10 +244,26 @@ export class StickRenderer {
       const cometa = mix(float(1).sub(u.headTail), float(1), t);
       return base.mul(parpadeo).mul(cometa);
     })();
-    this.material.opacityNode = Fn(() => u.opacity.mul(float(particle.get('alive').equal(uint(1)))))();
-    this.material.roughnessNode = u.roughness;
+    // Oclusión de la caja creciendo (escena 10): corte DURO por altura, igual criterio que
+    // `BoxWire` para las aristas. Por debajo de `growTop` (grilla) se ve normal; por encima,
+    // nada — hasta que la caja termina de crecer y el techo se va a `GROW_TOP_OPEN`.
+    const growVisible = () => float(particle.get('position').y.lessThanEqual(u.growTop));
+    this.material.opacityNode = Fn(() => u.opacity
+      .mul(float(particle.get('alive').equal(uint(1))))
+      .mul(growVisible()))();
+    // La rugosidad SUBE con el halo, y hace falta para que el apagado se vea. Con el albedo en
+    // negro el palito todavía devuelve el reflejo especular de la luz del orbe —que la tiene
+    // encima— y se ve BLANCO justo donde tendría que verse negro. Llevando la rugosidad a 1 ese
+    // reflejo se reparte por toda la superficie en vez de concentrarse en un brillo.
+    this.material.roughnessNode = Fn(() => mix(u.roughness, float(1), darkMask()))();
     this.material.metalnessNode = u.metalness;
-    this.material.emissiveNode = Fn(() => mix(u.baseColor, vec3(1, 1, 1), whiteAmount()).mul(u.emissive))();
+    // La emisión se apaga con el halo, y esto NO es opcional: el palito tiene brillo propio, así
+    // que con el color en negro pero la emisión intacta seguiría encendido y el agujero no se
+    // vería. Hay que apagar los dos juntos.
+    this.material.emissiveNode = Fn(() => {
+      const propia = mix(u.baseColor, vec3(1, 1, 1), whiteAmount()).mul(u.emissive);
+      return propia.mul(float(1).sub(darkMask()));
+    })();
 
     this.object = new THREE.Mesh(this.geometry, this.material);
     this.object.frustumCulled = false;
@@ -212,7 +275,9 @@ export class StickRenderer {
 
   update(dt) {
     const p = this.params;
-    const count = p.get('particles.count');
+    // Mismo redondeo que el simulador: el renderer tiene que dibujar exactamente las que se
+    // simulan, o quedan palitos congelados en pantalla (o huecos).
+    const count = Math.max(256, Math.round(p.get('particles.count') * p.get('particles.fraction') / 256) * 256);
     const opacity = p.get('particles.opacity') * p.get('layer3d.opacity');
 
     this.u.opacity.value = opacity;
@@ -230,6 +295,10 @@ export class StickRenderer {
       thicknessM / GEO.thickness / cell,
       lengthM / GEO.length / cell,
     );
+    this.u.whiteEnabled.value = p.get('particles.whiteEnabled') ? 1 : 0;
+    this.u.blackHalf.value = p.get('particles.blackHalf') ? 1 : 0;
+    this.u.blackAll.value = p.get('particles.blackAll') ? 1 : 0;
+    this.u.blackSeed.value = p.get('particles.blackSeed') >>> 0;
     this.u.whiteMin.value = p.get('particles.whiteSpeedMin');
     this.u.whiteMax.value = p.get('particles.whiteSpeedMax');
     this.u.ageGrow.value = Math.max(p.get('particles.ageGrow'), 0.001);
@@ -246,6 +315,28 @@ export class StickRenderer {
 
     const color = p.get('particles.baseColor');
     if (color !== this._color) { this.u.baseColor.value.set(color); this._color = color; }
+
+    // Techo de la caja creciendo, publicado por `BoxWire` (mismo orden de frame que el orbe:
+    // los elementos de Layer3D corren antes que este renderer). Si no hay nadie creciendo la
+    // caja, `boxGrowTopY` vale el techo "abierto" y la conversión da un número enorme igual.
+    const growTopY = this.ctx.boxGrowTopY ?? 1e4;
+    this.u.growTop.value = (growTopY - STAGE.sim.min[1]) / cell;
+
+    // Orbe. Se lee del ctx y no de params porque la posición es animada (la Lissajous del
+    // paseo), no un valor de escena. El orden del frame garantiza que Orb.update ya corrió.
+    const orb = this.ctx.orbState;
+    if (orb) {
+      this.u.orbDark.value = orb.dark;
+      this.u.orbJitter.value = orb.jitter;
+      if (orb.dark > 0.0001) {
+        this.u.orbPos.value.set(
+          (orb.pos.x - STAGE.sim.min[0]) / cell,
+          (orb.pos.y - STAGE.sim.min[1]) / cell,
+          (orb.pos.z - STAGE.sim.min[2]) / cell,
+        );
+        this.u.orbRadius.value = Math.max(orb.radius / cell, 0.01);
+      }
+    }
 
     const bloom = p.get('particles.bloom') > 0.001;
     if (bloom !== this._bloomOn) {

@@ -1,4 +1,5 @@
-import { describeSource, buildReferenceMarkdown, buildReferenceCsv, download } from '../reference.js';
+import { describeSource, buildReferenceMarkdown, buildReferenceCsv, download, nextMappingId } from '../reference.js';
+import { MAPPINGS_VERSION } from '../../io/Mapper.js';
 
 const MODES = ['trigger', 'toggle', 'gate', 'velocity', 'set', 'range'];
 
@@ -12,13 +13,13 @@ export class MappingsPanel {
 
   init() {
     document.getElementById('add-mapping').onclick = () => {
-      this.state.mappings.push({ id: nextId(this.state.mappings), source: {}, mode: 'trigger', target: '' });
+      this.state.mappings.push({ id: nextMappingId(this.state.mappings), source: {}, mode: 'trigger', target: '' });
       this.push();
     };
     document.getElementById('save-mappings').onclick = () => this.bus.post({ t: 'save' });
     document.getElementById('reset-mappings').onclick = () => this.bus.post({ t: 'resetMappings' });
     document.getElementById('export-mappings').onclick = () =>
-      download('mappings.json', JSON.stringify({ version: 1, mappings: this.state.mappings }, null, 2), 'application/json');
+      download('mappings.json', JSON.stringify({ version: MAPPINGS_VERSION, mappings: this.state.mappings }, null, 2), 'application/json');
     document.getElementById('import-mappings').onclick = () => this._importJson();
     document.getElementById('export-reference').onclick = () => {
       download('REFERENCIA-MIDI-OSC.md', buildReferenceMarkdown(this.state.registry, this.state.mappings, this.state.scenes), 'text/markdown');
@@ -32,6 +33,13 @@ export class MappingsPanel {
   }
 
   render() {
+    // El learn puede haberlo resuelto la otra ventana (o el botón por parámetro del panel de
+    // referencia, que comparte el mismo `learnRow` en el Mapper): si la fila ya tiene fuente,
+    // el botón no puede seguir parpadeando.
+    if (this.learning) {
+      const row = this.state.mappings.find((m) => m.id === this.learning);
+      if (!row || row.source?.kind) this.learning = null;
+    }
     this.table.innerHTML = '';
     const targets = this.state.registry.map((d) => d.id);
 
@@ -153,10 +161,4 @@ function textInput(value, onChange, placeholder) {
   el.style.width = '100px';
   el.onchange = () => onChange(el.value);
   return el;
-}
-
-function nextId(mappings) {
-  let n = 1;
-  while (mappings.some((m) => m.id === `m${String(n).padStart(2, '0')}`)) n++;
-  return `m${String(n).padStart(2, '0')}`;
 }

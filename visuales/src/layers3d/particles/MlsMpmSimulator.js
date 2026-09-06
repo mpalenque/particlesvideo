@@ -38,7 +38,28 @@ export class MlsMpmSimulator {
   static defineParams(params) {
     params.define({ id: 'particles.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Partículas', group: 'particles' });
     params.define({ id: 'particles.count', type: 'int', min: 4096, max: STAGE.sim.maxParticles, step: 4096, default: 131072, label: 'Cantidad', group: 'particles', sceneReset: false });
+    // FRACCIÓN de esa cantidad que la escena usa realmente. `particles.count` es estado vivo (lo
+    // fija el preset de calidad según la máquina) y por eso no se puede listar en una escena; esto
+    // sí, y multiplica: con 0.1 la escena corre con la décima parte de los palitos.
+    //
+    // Las que quedan afuera no se simulan NI se dibujan (el kernel corta por `numParticles`), así
+    // que bajar la fracción también baja el costo. Y al subirla, las que entran NACEN EN EL CENTRO
+    // de la caja en vez de aparecer donde las dejó la escena anterior — ver `spawnRange`.
+    params.define({ id: 'particles.fraction', type: 'float', min: 0.02, max: 1, default: 1, label: 'Fracción de palitos', group: 'particles' });
     params.define({ id: 'particles.baseColor', type: 'color', default: '#FF0000', label: 'Color base', group: 'particles' });
+    // EL OTRO COLOR, el que espera su turno. `particles.colorFlip` intercambia los dos, así que
+    // cada disparo cambia el color de la masa y el siguiente lo devuelve. Se hace intercambiando
+    // y no guardando un original aparte porque así la alternancia no tiene estado propio: los dos
+    // params SON el estado, y un cambio de escena los reescribe a los dos y deja todo en su lugar.
+    params.define({ id: 'particles.altColor', type: 'color', default: '#0000FF', label: 'Color alterno', group: 'particles' });
+    params.defineAction({ id: 'particles.colorFlip', label: 'Alternar color', group: 'particles' });
+    params.define({ id: 'particles.blackChance', type: 'float', min: 0, max: 1, default: 0, label: 'Probabilidad mitad negra', group: 'particles' });
+    params.define({ id: 'particles.blackHalf', type: 'bool', default: false, label: 'Mitad negra activa', group: 'particles' });
+    params.define({ id: 'particles.blackSeed', type: 'int', min: 0, max: 65535, default: 0, label: 'Selección negra', group: 'particles' });
+    params.define({ id: 'particles.blackAllChance', type: 'float', min: 0, max: 1, default: 0.22, label: 'Probabilidad negro total', group: 'particles' });
+    params.define({ id: 'particles.blackAll', type: 'bool', default: false, label: 'Negro total activo', group: 'particles' });
+    params.defineAction({ id: 'particles.colorKickRandom', label: 'Kick rojo/azul/negro', group: 'particles' });
+    params.define({ id: 'particles.whiteEnabled', type: 'bool', default: true, label: 'Blanco por velocidad', group: 'particles' });
     params.define({ id: 'particles.whiteSpeedMin', type: 'float', min: 0, max: 20, default: 2, label: 'Blanco desde', group: 'particles' });
     params.define({ id: 'particles.whiteSpeedMax', type: 'float', min: 0, max: 40, default: 7, label: 'Blanco hasta', group: 'particles' });
     params.define({ id: 'particles.size', type: 'float', min: 0.5, max: 6, default: 2, label: 'Tamaño', group: 'particles' });
@@ -47,7 +68,10 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.turbulence', type: 'float', min: 0, max: 2, default: 0.6, label: 'Turbulencia', group: 'particles' });
     params.define({ id: 'particles.turbulenceScale', type: 'float', min: 0.005, max: 0.05, default: 0.015, label: 'Escala turbulencia', group: 'particles' });
     params.define({ id: 'particles.turbulenceSpeed', type: 'float', min: 0, max: 2, default: 0.5, label: 'Vel. turbulencia', group: 'particles' });
-    params.define({ id: 'particles.density', type: 'float', min: 0.4, max: 2, default: 0.4, label: 'Densidad', group: 'particles' });
+    // Mínimo bajado de 0.4 a 0.15: con la fracción de palitos al 10 % (escena 10) la densidad de
+    // fábrica deja una bola que ocupa media caja, y para que la masa LLENE el volumen —y se pueda
+    // abrir un agujero en el medio que se lea contra el resto— hace falta poder ir más ralo.
+    params.define({ id: 'particles.density', type: 'float', min: 0.15, max: 2, default: 0.4, label: 'Densidad', group: 'particles' });
     params.define({ id: 'particles.stiffness', type: 'float', min: 0.5, max: 10, default: 3, label: 'Rigidez', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.viscosity', type: 'float', min: 0.01, max: 0.4, default: 0.1, label: 'Viscosidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.gravityY', type: 'float', min: -1, max: 1, default: 0, label: 'Gravedad Y', group: 'particles' });
@@ -64,6 +88,19 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.turnRate', type: 'float', min: 0.5, max: 40, default: 8, label: 'Giro del palito (1/s)', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.flicker', type: 'float', min: 0, max: 1, default: 0, label: 'Titileo', group: 'particles' });
     params.define({ id: 'particles.flickerRate', type: 'float', min: 0.1, max: 40, default: 9, label: 'Titileo (Hz)', group: 'particles' });
+    // NACIMIENTO PROGRESIVO. Con 0 las partículas aparecen todas juntas en el frame del reset,
+    // que es como venía. Con un tiempo, cada una recibe un retardo propio según DÓNDE cayó dentro
+    // de la caja, y hasta que le toca no existe: no se dibuja y tampoco pesa en el fluido. Al
+    // nacer arranca con edad 0, o sea que además crece desde cero por `particles.ageGrow`. Las
+    // dos cosas juntas son lo que da la sensación de que la masa se va formando sola en vez de
+    // aparecer de golpe.
+    params.define({ id: 'particles.birthTime', type: 'float', min: 0, max: 8, default: 0, label: 'Nacimiento (s)', group: 'particles' });
+    // Por dónde empieza. 'y' (abajo hacia arriba) es el que se lee mejor porque coincide con la
+    // gravedad que uno espera; 'radial' nace en el centro de la caja y se abre.
+    params.define({ id: 'particles.birthAxis', type: 'enum', options: ['y', 'x', 'z', 'radial'], default: 'y', label: 'Eje del nacimiento', group: 'particles' });
+    // Cuánto se desordena el frente. Con 0 el borde es un plano perfecto que sube y se ve la
+    // línea; con 0.35 el frente queda deshilachado y parece que la masa se condensa.
+    params.define({ id: 'particles.birthSpread', type: 'float', min: 0, max: 1, default: 0.35, label: 'Desorden del frente', group: 'particles' });
     params.defineAction({ id: 'particles.resetInBox', label: 'Reubicar en la caja', group: 'particles' });
     params.defineAction({ id: 'particles.fillColumn', label: 'Llenar la columna de flujo', group: 'particles' });
     Forces.defineParams(params);
@@ -122,6 +159,11 @@ export class MlsMpmSimulator {
     u.wrapA = uniform(0);         // techo del encuadre en grilla: y = wrapA + wrapB·z
     u.wrapB = uniform(0);
     u.emitSpread = uniform(4);    // alto de la banda de emisión, en celdas
+    u.birthTime = uniform(0);     // segundos que tarda en nacer toda la masa
+    u.spawnFrom = uniform(0, 'uint');   // rango [spawnFrom, spawnTo) que reubica `spawnRange`
+    u.spawnTo = uniform(0, 'uint');
+    u.birthAxis = uniform(0, 'uint');
+    u.birthSpread = uniform(0);
     u.numParticles = uniform(0, 'uint');
 
     u.boxEnabled = uniform(0, 'uint');
@@ -274,7 +316,21 @@ export class MlsMpmSimulator {
 
     this.kernels.g2p = Fn(() => {
       If(instanceIndex.greaterThanEqual(uint(u.numParticles)), () => { Return(); });
-      If(this.particleBuffer.element(instanceIndex).get('alive').equal(uint(0)), () => { Return(); });
+      // GESTACIÓN. Una partícula sin nacer lleva la edad en NEGATIVO: es su cuenta regresiva.
+      // Acá es el único lugar donde avanza, porque es el único kernel que corre una vez por
+      // partícula y por frame. Mientras tanto no se mueve ni pesa en la grilla (p2g1 y p2g2 la
+      // saltean por `alive`), así que queda congelada en la posición que le dejó el reset.
+      If(this.particleBuffer.element(instanceIndex).get('alive').equal(uint(0)), () => {
+        const edad = this.particleBuffer.element(instanceIndex).get('age');
+        edad.assign(edad.add(u.frameTime));
+        If(edad.greaterThanEqual(float(0)), () => {
+          // Nace con edad 0 y no con lo que le sobró del retardo: así entra en el crecimiento de
+          // `particles.ageGrow` desde el principio y se la ve aparecer, no llegar ya hecha.
+          edad.assign(float(0));
+          this.particleBuffer.element(instanceIndex).get('alive').assign(uint(1));
+        });
+        Return();
+      });
 
       const particleMass = this.particleBuffer.element(instanceIndex).get('mass').toConst('particleMass');
       const pos = this.particleBuffer.element(instanceIndex).get('position').xyz.toVar('particlePosition');
@@ -305,7 +361,9 @@ export class MlsMpmSimulator {
       });
 
       vel.mulAssign(particleMass);     // pequeña variación entre partículas, como el original
-      this.particleBuffer.element(instanceIndex).get('C').assign(B.mul(4));
+      const transformed = this.forces.transformVelocity(vel, pos, u.frameTime);
+      // La deformación anterior tampoco debe reinyectar el rumbo que acaba de cambiar.
+      this.particleBuffer.element(instanceIndex).get('C').assign(B.mul(4).mul(transformed.oneMinus()));
       pos.addAssign(vel.mul(u.dt));
 
       // Pared exterior del dominio (siempre activa): es el borde del escenario.
@@ -389,6 +447,87 @@ export class MlsMpmSimulator {
         });
       });
 
+      // Emisión continua HORIZONTAL (hoy sin uso; fue la 14 y la 15): un stream que cruza la caja hacia el
+      // bloque rojo y que, apenas toca la pared del fondo, MUERE Y RENACE en la pared de
+      // enfrente. Es lo contrario del atractor que había antes: con una fuerza que tira, la
+      // masa entera termina apelmazada contra el borde y ahí se queda. Con reciclado, lo que
+      // llega desaparece y sale de nuevo, así que el chorro nunca se acumula.
+      //
+      // El test se hace en el espacio LOCAL de la caja, no en X del mundo: si la caja estuviera
+      // girada, el clamp la frenaría en su propia pared y el umbral en X del mundo no se
+      // alcanzaría nunca — las partículas quedarían pegadas para siempre sin reciclarse.
+      If(f.wrapMode.equal(uint(2)), () => {
+        const cw = cos(u.boxYaw).toConst('cw');
+        const sw = sin(u.boxYaw).toConst('sw');
+        const relW = pos.sub(u.boxCenter).toConst('relW');
+        const localW = vec3(cw.mul(relW.x).sub(sw.mul(relW.z)), relW.y, sw.mul(relW.x).add(cw.mul(relW.z))).toConst('localW');
+        // Sentido del stream = signo del flujo en X. El margen es para disparar apenas toca la
+        // pared: el clamp de la caja ya la dejó ahí clavada, así que sin margen igual entraría,
+        // pero con margen se recicla un pelo antes y no se ve el frenado contra el borde.
+        const dirW = select(f.flow.x.lessThan(0), float(-1), float(1)).toConst('dirW');
+        If(localW.x.mul(dirW).greaterThan(u.boxHalf.x.sub(float(1.5))), () => {
+          const seedW = instanceIndex.add(u.resetSeed);
+          const wy = hash(seedW.mul(uint(5))).sub(0.5).mul(2);
+          const wz = hash(seedW.mul(uint(5)).add(uint(1))).sub(0.5).mul(2);
+          const wx = hash(seedW.mul(uint(5)).add(uint(2)));
+          // Renace pegada a la pared de enfrente, con un poco de dispersión para que el frente
+          // del chorro no sea un plano perfecto, y repartida en todo el alto y el fondo.
+          const nx = dirW.negate().mul(u.boxHalf.x.sub(wx.mul(u.emitSpread)));
+          const ny = wy.mul(u.boxHalf.y).mul(0.96);
+          const nz = wz.mul(u.boxHalf.z).mul(0.96);
+          pos.assign(u.boxCenter.add(vec3(
+            cw.mul(nx).add(sw.mul(nz)),
+            ny,
+            sw.negate().mul(nx).add(cw.mul(nz)),
+          )));
+          pos.assign(clamp(pos, vec3(2), vec3(u.gridSize).sub(2)));
+          vel.assign(f.flow);
+          const elW = this.particleBuffer.element(instanceIndex);
+          elW.get('C').assign(mat3(0));
+          elW.get('age').assign(float(0));
+          elW.get('speedSmooth').assign(f.flow.length());
+          elW.get('direction').assign(normalize(f.flow.add(vec3(0, 0.001, 0))));
+        });
+      });
+
+      // FUGA RADIAL (hoy sin uso; fue la 15 en su segunda versión): la partícula se aleja del centro de la huella y, cuando pasa
+      // el borde, MUERE Y RENACE en el eje del centro. Es el reciclado que hace posible que
+      // "se vayan lejos" sin que se apelmacen: la fuerza que las empuja (un `vortex.pull`
+      // negativo) las manda contra la pared del escenario y ahí se quedarían para siempre.
+      //
+      // El test es en XZ contra `boxHalf.x` — un CILINDRO, no la caja entera. Con el test por
+      // caja, las que van en diagonal cruzarían más camino que las que van derecho y el frente
+      // de la fuga se vería cuadrado. Se compara al cuadrado para no pagar una raíz por
+      // partícula y por frame.
+      If(f.wrapMode.equal(uint(3)), () => {
+        const dx = pos.x.sub(u.boxCenter.x).toConst('dxR');
+        const dz = pos.z.sub(u.boxCenter.z).toConst('dzR');
+        const lejos = dx.mul(dx).add(dz.mul(dz)).greaterThan(u.boxHalf.x.mul(u.boxHalf.x));
+        If(lejos, () => {
+          const seedR = instanceIndex.add(u.resetSeed);
+          const rx = hash(seedR.mul(uint(7))).sub(0.5).mul(2);
+          const rz = hash(seedR.mul(uint(7)).add(uint(1))).sub(0.5).mul(2);
+          const ry = hash(seedR.mul(uint(7)).add(uint(2))).sub(0.5).mul(2);
+          // Nace en una columna finita sobre el eje del centro, repartida en todo el alto: así
+          // la fuga es un volumen que se abre y no un disco plano. `emitSpread` da el grosor de
+          // esa columna; con 0 nacerían todas exactamente en el eje y se vería el punto.
+          pos.assign(vec3(
+            u.boxCenter.x.add(rx.mul(u.emitSpread)),
+            u.boxCenter.y.add(ry.mul(u.boxHalf.y)),
+            u.boxCenter.z.add(rz.mul(u.emitSpread)),
+          ));
+          pos.assign(clamp(pos, vec3(2), vec3(u.gridSize).sub(2)));
+          // Renace QUIETA, no con la velocidad del flujo como los otros dos modos: acá lo que
+          // acelera es el propio vórtice, y arrancar de cero es lo que da la lectura de que la
+          // partícula nace en el centro y va ganando velocidad hacia afuera.
+          vel.assign(vec3(0));
+          const elR = this.particleBuffer.element(instanceIndex);
+          elR.get('C').assign(mat3(0));
+          elR.get('age').assign(float(0));
+          elR.get('speedSmooth').assign(float(0));
+        });
+      });
+
       this.particleBuffer.element(instanceIndex).get('position').assign(pos);
       this.particleBuffer.element(instanceIndex).get('velocity').assign(vel);
 
@@ -436,9 +575,62 @@ export class MlsMpmSimulator {
       el.get('mass').assign(float(1).sub(hash(seed).mul(0.002)));
       el.get('direction').assign(vec3(0, 0, 1));
       el.get('speedSmooth').assign(float(0));
-      // Edades repartidas al azar: si nacieran todas en 0 crecerían todas juntas y se notaría.
-      el.get('age').assign(hash(seed.add(uint(31))).mul(4));
-      el.get('alive').assign(uint(1));
+
+      // RETARDO DE NACIMIENTO según dónde cayó la partícula dentro de la caja. `r` ya viene en
+      // −1..1 por eje (es la posición local normalizada), así que el gradiente sale de ahí sin
+      // volver a dividir por el medio lado.
+      const gy = r.y.mul(0.5).add(0.5);
+      const gx = r.x.mul(0.5).add(0.5);
+      const gz = r.z.mul(0.5).add(0.5);
+      // Radial: la diagonal del cubo unitario mide √3, así que se divide por eso para que el
+      // último rincón caiga en 1 y no antes.
+      const gr = r.length().div(1.7320508);
+      const eje = select(u.birthAxis.equal(uint(1)), gx,
+        select(u.birthAxis.equal(uint(2)), gz,
+          select(u.birthAxis.equal(uint(3)), gr, gy))).toConst();
+      const desorden = hash(seed.add(uint(577))).sub(0.5).mul(u.birthSpread);
+      const retardo = u.birthTime.mul(clamp(eje.add(desorden), 0, 1)).toConst();
+      const gestando = retardo.greaterThan(float(0.0001)).toConst();
+
+      // Sin nacimiento progresivo, edades repartidas al azar: si nacieran todas en 0 crecerían
+      // todas juntas y se notaría el pulso.
+      el.get('age').assign(select(gestando, retardo.negate(), hash(seed.add(uint(31))).mul(4)));
+      el.get('alive').assign(select(gestando, uint(0), uint(1)));
+    })().compute(maxParticles);
+
+    // Reubica en el CENTRO de la caja solo las partículas de un rango de índices, y las deja
+    // gestando con un retardo proporcional a lo lejos que caen del centro. Es lo que se usa
+    // cuando `particles.fraction` SUBE: las que entran son palitos que la escena anterior tenía
+    // apagados y que están en cualquier lado, así que sin esto aparecerían de golpe repartidos
+    // por todo el escenario. Naciendo del centro hacia afuera se lee como que la masa crece.
+    //
+    // El emisor es una esfera y no la caja entera: `emitSpread` da su radio. Con la raíz cúbica
+    // del azar el reparto queda parejo en volumen (sin ella se amontonan todas en el centro,
+    // porque una esfera tiene mucho más volumen en la cáscara que en el núcleo).
+    this.kernels.spawnRange = Fn(() => {
+      If(instanceIndex.lessThan(u.spawnFrom).or(instanceIndex.greaterThanEqual(u.spawnTo)), () => { Return(); });
+      const seed = instanceIndex.add(u.resetSeed);
+      const r = hash(seed.mul(uint(11))).pow(float(1).div(3)).toConst();
+      const theta = hash(seed.mul(uint(11)).add(uint(1))).mul(6.2831853).toConst();
+      const cosPhi = hash(seed.mul(uint(11)).add(uint(2))).sub(0.5).mul(2).toConst();
+      const sinPhi = max(float(1).sub(cosPhi.mul(cosPhi)), float(0)).sqrt().toConst();
+      const dir = vec3(sinPhi.mul(cos(theta)), cosPhi, sinPhi.mul(sin(theta))).toConst();
+      const local = dir.mul(r).mul(u.emitSpread).toConst();
+
+      const el = this.particleBuffer.element(instanceIndex);
+      el.get('position').assign(clamp(u.boxCenter.add(local), vec3(2), vec3(u.gridSize).sub(2)));
+      el.get('velocity').assign(vec3(0));
+      el.get('C').assign(mat3(0));
+      el.get('density').assign(float(1));
+      el.get('mass').assign(float(1).sub(hash(seed).mul(0.002)));
+      el.get('direction').assign(dir);
+      el.get('speedSmooth').assign(float(0));
+      // Retardo por radio: las del centro nacen primero. Con `birthTime` en 0 nacen todas ya.
+      const desorden = hash(seed.add(uint(577))).sub(0.5).mul(u.birthSpread);
+      const retardo = u.birthTime.mul(clamp(r.add(desorden), 0, 1)).toConst();
+      const gestando = retardo.greaterThan(float(0.0001)).toConst();
+      el.get('age').assign(select(gestando, retardo.negate(), float(0)));
+      el.get('alive').assign(select(gestando, uint(0), uint(1)));
     })().compute(maxParticles);
 
     // Arranca el flujo vertical YA en régimen: reparte las partículas por toda la columna, del
@@ -473,6 +665,39 @@ export class MlsMpmSimulator {
       el.get('age').assign(hash(seed.add(uint(31))).mul(4));
       el.get('alive').assign(uint(1));
     })().compute(maxParticles);
+
+    // El corte es INMEDIATO a propósito: esto va colgado del kick que dispara los rayos, y un
+    // fundido en un golpe de batería llega tarde y se lee como una mancha, no como un switch.
+    this.params.onAction('particles.colorFlip', () => {
+      const a = this.params.get('particles.baseColor');
+      const b = this.params.get('particles.altColor');
+      this.params.set('particles.baseColor', b, { immediate: true });
+      this.params.set('particles.altColor', a, { immediate: true });
+      this.params.set('particles.blackAll', false, { immediate: true });
+
+      // En algunos golpes de la 23, aproximadamente la mitad de las instancias se apaga a
+      // negro. La segunda tirada cambia la selección para que no sean siempre los mismos.
+      const halfBlack = Math.random() < this.params.get('particles.blackChance');
+      this.params.set('particles.blackHalf', halfBlack, { immediate: true });
+      this.params.set('particles.blackSeed', Math.floor(Math.random() * 65536), { immediate: true });
+    });
+
+    // Estado de contraste para los kicks de la 22/23. Rojo y azul se alternan para que dos
+    // golpes seguidos nunca pasen inadvertidos; algunos golpes apagan la masa ENTERA a negro.
+    // El negro es una máscara final del material, no simplemente albedo negro: también corta
+    // el blanco por velocidad y la emisión propia.
+    this.params.onAction('particles.colorKickRandom', () => {
+      const black = Math.random() < this.params.get('particles.blackAllChance');
+      this.params.set('particles.blackAll', black, { immediate: true });
+      this.params.set('particles.blackHalf', false, { immediate: true });
+      this.params.set('particles.blackSeed', Math.floor(Math.random() * 65536), { immediate: true });
+      if (black) return;
+
+      const current = String(this.params.get('particles.baseColor')).toLowerCase();
+      const next = current === '#0000ff' ? '#FF0000' : '#0000FF';
+      this.params.set('particles.baseColor', next, { immediate: true });
+      this.params.set('particles.altColor', next === '#FF0000' ? '#0000FF' : '#FF0000', { immediate: true });
+    });
 
     this.params.onAction('particles.resetInBox', () => this.resetInBox());
     this.params.onAction('particles.fillColumn', () => {
@@ -530,17 +755,27 @@ export class MlsMpmSimulator {
     const u = this.uniforms;
     const { cellSize } = STAGE.sim;
 
-    const count = p.get('particles.count');
+    // Cantidad EFECTIVA: la de la máquina por la fracción que pide la escena. Se redondea a
+    // múltiplo de 256 (el tamaño del workgroup) para no dejar un grupo a medio despachar.
+    const total = p.get('particles.count');
+    const count = Math.max(256, Math.round(total * p.get('particles.fraction') / 256) * 256);
     if (count !== this.numParticles) {
+      const anterior = this.numParticles;
       this.numParticles = count;
       u.numParticles.value = count;
       for (const k of ['p2g1', 'p2g2', 'g2p']) {
         this.kernels[k].count = count;
         this.kernels[k].updateDispatchCount();
       }
+      // Si la cuenta CRECIÓ, las que entran vienen de donde las dejó la escena anterior —
+      // repartidas por todo el escenario— y aparecerían de golpe. Se las manda a nacer desde el
+      // centro de la caja. Al bajar no hace falta nada: simplemente dejan de simularse.
+      if (count > anterior) this._pendingSpawn = { from: anterior, to: count };
     }
 
-    // Misma fórmula que conf.updateParams del repo original.
+    // Misma fórmula que conf.updateParams del repo original. Va con el count EFECTIVO: la
+    // densidad de reposo se reparte entre las partículas que existen, así que con la fracción
+    // baja la masa ocupa el mismo volumen en vez de encogerse a la décima parte.
     const level = Math.max(count / 8192, 1);
     u.restDensity.value = 0.25 * level * p.get('particles.density') * DENSITY_CALIBRATION;
     u.stiffness.value = p.get('particles.stiffness');
@@ -565,16 +800,29 @@ export class MlsMpmSimulator {
     u.hardClamp.value = p.get('box.hardClamp') ? 1 : 0;
     u.wallBounce.value = p.get('box.wallBounce');
 
+    const ejes = { y: 0, x: 1, z: 2, radial: 3 };
+    u.birthTime.value = p.get('particles.birthTime');
+    u.birthAxis.value = ejes[p.get('particles.birthAxis')] ?? 0;
+    u.birthSpread.value = p.get('particles.birthSpread');
+
     this.forces.update(dt);
     u.dt.value = Math.min(dt, 1 / 60) * 6 * p.get('particles.speed');
     u.frameTime.value = Math.min(dt, 1 / 30);
     u.speedSmooth.value = p.get('particles.speedSmooth');
-    u.turnRate.value = p.get('particles.turnRate');
+    u.turnRate.value = Math.max(p.get('particles.turnRate'), p.get('vortex.response'));
     this._updateWrapLine();
 
     if (this._pendingReset) {
       this._pendingReset = false;
       await this.renderer.computeAsync(this.kernels.resetInBox);
+    }
+    // Va después de que `boxCenter` y `emitSpread` estén al día: el kernel los usa para saber
+    // dónde está el centro y qué radio tiene la esfera donde nacen.
+    if (this._pendingSpawn) {
+      u.spawnFrom.value = this._pendingSpawn.from;
+      u.spawnTo.value = this._pendingSpawn.to;
+      this._pendingSpawn = null;
+      await this.renderer.computeAsync(this.kernels.spawnRange);
     }
     // Va después de `_updateWrapLine`, que es quien deja wrapA/wrapB al día: el llenado los usa
     // para saber hasta dónde llega la columna.

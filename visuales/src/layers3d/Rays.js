@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu';
-import { uniform, mrt, float } from 'three/tsl';
+import { uniform, mrt } from 'three/tsl';
 import { MAX_REPULSORS } from './particles/Forces.js';
 
-const POOL = MAX_REPULSORS;   // un slot de repulsor por rayo, desde que cae hasta que se apaga el impacto
-const SHOCK_TIME = 0.3;
+// Un slot de repulsor por rayo, desde que cae hasta que se apaga el impacto. Con los valores
+// por defecto cada rayo ocupa su slot ~1.2 s (0.68 s de caída + 0.55 s de onda), así que la
+// cantidad de slots es el techo de rayos por segundo que aguanta la escena sin comerse notas.
+const POOL = MAX_REPULSORS;
 
-// Rayos blancos que caen y explotan en el piso (escenas 17+). Cada rayo publica un repulsor
+// Rayos blancos que caen y explotan en el piso (desde la escena 16). Cada rayo publica un repulsor
 // de segmento mientras cae, y al tocar el piso dispara debris y una onda expansiva.
 export class Rays {
   static defineParams(params) {
@@ -13,15 +15,34 @@ export class Rays {
     params.define({ id: 'rays.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Opacidad', group: 'rays' });
     params.define({ id: 'rays.fallSpeed', type: 'float', min: 0.5, max: 30, default: 6, label: 'Velocidad (m/s)', group: 'rays' });
     params.define({ id: 'rays.length', type: 'float', min: 0.1, max: 4, default: 0.8, label: 'Largo (m)', group: 'rays' });
-    params.define({ id: 'rays.width', type: 'float', min: 0.01, max: 0.5, default: 0.1, label: 'Ancho (m)', group: 'rays' });
+    // Un centímetro proyecta unos 2–3 px en la pantalla: el rayo debe leerse como una línea.
+    params.define({ id: 'rays.width', type: 'float', min: 0.002, max: 0.5, default: 0.014, label: 'Ancho (m)', group: 'rays' });
     params.define({ id: 'rays.startY', type: 'float', min: 3, max: 8, default: 4.5, label: 'Altura inicial (m)', group: 'rays' });
     params.define({ id: 'rays.zMin', type: 'float', min: -5, max: 0, default: -2.5, label: 'Z mínimo (m)', group: 'rays' });
     params.define({ id: 'rays.zMax', type: 'float', min: -5, max: 0, default: -0.5, label: 'Z máximo (m)', group: 'rays' });
-    params.define({ id: 'rays.repelRadius', type: 'float', min: 0.1, max: 5, default: 1.0, label: 'Radio repulsión (m)', group: 'rays' });
-    params.define({ id: 'rays.repelStrength', type: 'float', min: 0, max: 10, default: 3, label: 'Fuerza repulsión', group: 'rays' });
-    params.define({ id: 'rays.impactRadius', type: 'float', min: 0.1, max: 6, default: 1.5, label: 'Radio impacto (m)', group: 'rays' });
-    params.define({ id: 'rays.impactStrength', type: 'float', min: 0, max: 10, default: 4, label: 'Fuerza impacto', group: 'rays' });
-    params.define({ id: 'rays.bloom', type: 'float', min: 0, max: 1, default: 1, label: 'Bloom', group: 'rays' });
+    // Manuel: el rayo tiene que MOVER los palitos, tanto mientras cae como al chocar. Antes
+    // apenas se notaba: 3 y 4 son aceleraciones en unidades de grilla, o sea 0.3 y 0.4 m/s²,
+    // nada al lado de la turbulencia. Ahora la caída abre un canal a su paso (25 = 2.5 m/s²
+    // sobre 1.6 m de radio) y el impacto es un golpe seco (60 = 6 m/s², más que la gravedad).
+    // Los techos suben a 200 para que se pueda exagerar desde MIDI.
+    // Segunda subida de las fuerzas, y por lo mismo que la primera: Manuel *"no llega a notar que
+    // interactúe, que genere un cambio"*. Los números son aceleraciones en unidades de grilla, o
+    // sea que 70 son 7 m/s² y 160 son 16 — el doble y medio de la gravedad terrestre, de golpe.
+    //
+    // Pero el cambio que hace que SE VEA no es la fuerza sola: es que la fuerza alcance para que
+    // los palitos pasen el umbral de blanco. Las escenas de rayos tienen `whiteSpeedMin` en 2.5,
+    // así que un golpe de este tamaño no solo los mueve — los ENCIENDE. El impacto se lee como un
+    // fogonazo blanco que se abre desde el piso, y eso sí se nota desde la última fila.
+    params.define({ id: 'rays.repelRadius', type: 'float', min: 0.1, max: 5, default: 2.2, label: 'Radio repulsión (m)', group: 'rays' });
+    params.define({ id: 'rays.repelStrength', type: 'float', min: 0, max: 400, default: 70, label: 'Fuerza repulsión', group: 'rays' });
+    params.define({ id: 'rays.impactRadius', type: 'float', min: 0.1, max: 6, default: 3.6, label: 'Radio impacto (m)', group: 'rays' });
+    params.define({ id: 'rays.impactStrength', type: 'float', min: 0, max: 400, default: 160, label: 'Fuerza impacto', group: 'rays' });
+    // La onda duraba 0.3 s fijos y era el otro motivo de que no se notara: 18 frames es menos de
+    // lo que tarda el ojo en encontrar dónde pasó algo. Con 0.55 s se ve el anillo ABRIRSE.
+    // Alargarla de más la vuelve un empujón blando: la gracia es que sea un golpe que se expande,
+    // no una fuerza sostenida.
+    params.define({ id: 'rays.impactTime', type: 'float', min: 0.1, max: 1.5, default: 0.55, label: 'Duración del impacto (s)', group: 'rays' });
+    params.define({ id: 'rays.bloom', type: 'float', min: 0, max: 4, default: 1, label: 'Bloom', group: 'rays' });
     params.define({ id: 'rays.color', type: 'color', default: '#FFFFFF', label: 'Color', group: 'rays' });
     params.defineAction({ id: 'ray.spawn', label: 'Disparar rayo', group: 'rays', argHint: 'random | left | center | right | número' });
   }
@@ -34,18 +55,25 @@ export class Rays {
     this.uOpacity = uniform(0);
     this.uBloom = uniform(1);
     this._color = '';
-    this._bloomOn = null;
   }
 
   async init(scene) {
     this.material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
     this.material.colorNode = this.uColor;
     this.material.opacityNode = this.uOpacity;
+    // El bloom cambia por uniforme: apagarlo no debe compilar otro shader durante un golpe.
+    this.material.mrtNode = mrt({ bloomIntensity: this.uBloom });
 
+    // Una sola línea blanca por rayo, como en el diseño original. Las envolventes añadidas
+    // ensanchaban el trazo hasta ocho veces y triplicaban las llamadas de dibujo. Tampoco
+    // agregamos PointLights: alternar su cantidad recompilaba los materiales de los palitos
+    // durante los golpes; la interacción visible sigue en las fuerzas y las esquirlas.
+    this.geometry = new THREE.BoxGeometry(1, 1, 1);
     this.bars = [];
     for (let i = 0; i < POOL; i++) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.material);
+      const bar = new THREE.Mesh(this.geometry, this.material);
       bar.visible = false;
+      bar.renderOrder = 2;
       scene.add(bar);
       this.bars.push(bar);
     }
@@ -55,8 +83,16 @@ export class Rays {
 
   spawn(arg) {
     if (!this.params.get('rays.enabled')) return;
-    const slot = this._freeSlot();
-    if (slot < 0) return;
+    // Si no queda lugar se sacrifica el rayo MÁS VIEJO, no el disparo nuevo. Perder una nota
+    // se nota (falta un golpe donde el oído lo espera); acortarle la cola al rayo que ya venía
+    // cayendo, no. Antes se descartaba el disparo nuevo y encima en silencio.
+    let slot = this._freeSlot();
+    if (slot < 0) {
+      const viejo = this.rays.shift();
+      if (!viejo) return;
+      slot = viejo.slot;
+      this.ctx.forces.clearRepulsor(slot);
+    }
 
     let x;
     if (arg === undefined || arg === 'random') x = (Math.random() * 2 - 1) * 3.8;
@@ -82,6 +118,17 @@ export class Rays {
   update(dt) {
     const p = this.params;
     const forces = this.ctx.forces;
+
+    // Si se sale de una escena de rayos se descarta cualquier cola que quedara en vuelo. Así un
+    // golpe recibido antes de la 16 no puede reaparecer al volver a habilitarlos después.
+    if (!p.get('rays.enabled')) {
+      for (const bar of this.bars) bar.visible = false;
+      for (let i = 0; i < POOL; i++) forces.clearRepulsor(i);
+      this.rays.length = 0;
+      this.uOpacity.value = 0;
+      return;
+    }
+
     const opacity = p.get('rays.opacity') * p.get('layer3d.opacity');
     const length = p.get('rays.length');
     const width = p.get('rays.width');
@@ -91,14 +138,11 @@ export class Rays {
     this.uOpacity.value = opacity;
 
     const color = p.get('rays.color');
-    if (color !== this._color) { this.uColor.value.set(color); this._color = color; }
-
-    const bloomOn = p.get('rays.bloom') > 0.001;
-    if (bloomOn !== this._bloomOn) {
-      this._bloomOn = bloomOn;
-      this.material.mrtNode = bloomOn ? mrt({ bloomIntensity: this.uBloom }) : null;
-      this.material.needsUpdate = true;
+    if (color !== this._color) {
+      this.uColor.value.set(color);
+      this._color = color;
     }
+
     this.uBloom.value = p.get('rays.bloom');
 
     for (const bar of this.bars) bar.visible = false;
@@ -108,10 +152,20 @@ export class Rays {
     for (const r of this.rays) {
       if (r.shock >= 0) {
         // Onda expansiva: el radio crece y la fuerza decae hasta apagarse.
+        //
+        // La fuerza cae al CUADRADO y no lineal, y esa curva es la que hace que se lea como un
+        // golpe: con la caída lineal el empujón se reparte parejo en todo el medio segundo y lo
+        // que se ve es que la masa se corre despacio. Con (1−u)² el 60 % del envión se entrega en
+        // el primer cuarto de la onda, o sea que hay un golpe seco y después una cola.
+        const shockTime = Math.max(p.get('rays.impactTime'), 0.05);
         r.shock += dt;
-        if (r.shock >= SHOCK_TIME) continue;
-        const u = r.shock / SHOCK_TIME;
-        forces.setRepulsor(r.slot, r.x, 0, r.z, 0.2, p.get('rays.impactStrength') * (1 - u), p.get('rays.impactRadius') * u);
+        if (r.shock >= shockTime) continue;
+        const u = r.shock / shockTime;
+        const caida = (1 - u) * (1 - u);
+        // El anillo no arranca en radio 0: con `u` a secas, el primer frame de la onda tiene la
+        // fuerza máxima sobre un radio de 2 cm y no toca a nadie. Arrancando en el 25 % del radio
+        // el golpe agarra masa desde el primer frame, que es cuando la fuerza vale más.
+        forces.setRepulsor(r.slot, r.x, 0, r.z, 0.2, p.get('rays.impactStrength') * caida, p.get('rays.impactRadius') * (0.25 + 0.75 * u));
         survivors.push(r);
         continue;
       }
@@ -139,7 +193,7 @@ export class Rays {
   }
 
   dispose() {
-    for (const bar of this.bars) bar.geometry.dispose();
+    this.geometry.dispose();
     this.material.dispose();
   }
 }

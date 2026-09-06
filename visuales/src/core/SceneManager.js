@@ -46,15 +46,36 @@ export class SceneManager {
     this.goto(next.id);
   }
 
-  goto(id, { transition } = {}) {
+  // `force` re-entra a la escena aunque ya sea la actual. Nadie lo usa en el show; está para
+  // poder pedir un re-disparo a mano desde la consola (`vis.scenes.goto('10', {force:true})`).
+  goto(id, { transition, force = false } = {}) {
     const scene = this.byId.get(id);
     if (!scene) { console.error(`[vis] escena desconocida: ${id}`); return; }
+
+    // UNA NOTA DE LA ESCENA EN CURSO NO LA VUELVE A DISPARAR (pedido de Manuel: *"si llega una
+    // nota para controlar la escena, hasta que no cambie de escena tiene que seguir en esa
+    // escena y no volver a triggerearla, porque quizás llegan varias notas de la escena juntas,
+    // pero es por seguridad"*).
+    //
+    // Sin esto, una nota repetida es un CORTE VISIBLE y no un no-op: `goto` vuelve a disparar las
+    // `actions` de entrada, y varias de ellas reubican la masa entera (`particles.resetInBox` en
+    // la 10, `fillColumn` en la 12). O sea que un doble disparo en Ableton —o una nota sostenida
+    // que se retriggerea— borraría de golpe el estado del fluido en mitad de la escena.
+    //
+    // Va acá y no en el Mapper a propósito: así vale para TODO lo que pueda pedir una escena
+    // (MIDI, OSC, la barra de escenas, el teclado), no solo para las notas.
+    if (id === this.current && !force) return;
 
     const prev = this.byId.get(this.current);
     if (prev?.onExit) prev.onExit(this.ctx);
 
     const secs = transition ?? scene.transition ?? 0;
     const wanted = scene.params ?? {};
+    // `transitions` (opcional, por escena): tiempo propio para algunos params. Existe porque no
+    // todo tiene que entrar al mismo ritmo — el cambio de color de las partículas tiene que ser
+    // un corte aunque el resto de la escena entre en un fundido de un segundo y medio.
+    // Se aplica también a los params que la escena NO lista y que vuelven a su default.
+    const propios = scene.transitions ?? {};
 
     for (const def of this.params.defs.values()) {
       const listed = Object.prototype.hasOwnProperty.call(wanted, def.id);
@@ -62,7 +83,7 @@ export class SceneManager {
       if (!listed && !def.sceneReset) continue;
       const value = listed ? wanted[def.id] : (this.base[def.id] ?? def.default);
       if (def.type === 'bool' || def.type === 'enum') this.params.set(def.id, value);
-      else this.params.tween(def.id, value, secs);
+      else this.params.tween(def.id, value, propios[def.id] ?? secs);
     }
 
     this.current = id;

@@ -12,7 +12,7 @@ export function oscAddressNormalized(def) {
 
 export function describeSource(source) {
   if (!source || !source.kind) return '';
-  if (source.kind === 'note') return `Nota ${source.note} ch${source.channel}`;
+  if (source.kind === 'note') return source.note == null ? `Cualquier nota ch${source.channel}` : `Nota ${source.note} ch${source.channel}`;
   if (source.kind === 'cc') return `CC ${source.cc} ch${source.channel}`;
   if (source.kind === 'osc') return source.address;
   return '';
@@ -20,6 +20,14 @@ export function describeSource(source) {
 
 export function sourcesFor(id, mappings) {
   return mappings.filter((m) => m.target === id && m.source?.kind).map((m) => m.source);
+}
+
+// Ids de mapeo: los usan tanto el panel de mapeos como el botón de learn por parámetro, y no
+// se pueden pisar entre sí porque el Mapper busca la fila por id cuando llega el MIDI.
+export function nextMappingId(mappings) {
+  let n = 1;
+  while (mappings.some((m) => m.id === `m${String(n).padStart(2, '0')}`)) n++;
+  return `m${String(n).padStart(2, '0')}`;
 }
 
 // Los '|' de enums y bools rompen las tablas Markdown si no se escapan.

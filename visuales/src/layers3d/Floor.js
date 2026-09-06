@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import {
-  uniform, float, vec3, Fn, attribute, instanceIndex, varying, floor, mod, smoothstep, max,
+  uniform, float, vec3, Fn, attribute, instanceIndex, varying, floor, mod, max,
 } from 'three/tsl';
 
 // Cantidad de cubitos preasignados. Alcanza para cubrir todo el escenario con los
@@ -16,14 +16,18 @@ const ROWS = 110;
 // La grilla entera se arma en el vertex shader desde `instanceIndex`: no hay trabajo de CPU
 // por frame ni matrices que subir.
 export class Floor {
+  // Los tres tamaños del dash (largo, ancho y alto) bajaron un 30% el 2026-09-04 a pedido de
+  // Manuel. El período y la separación de carriles NO cambian: el dash se achica y queda más
+  // aire entre uno y otro, que es lo que se pidió; si se achicara todo junto, la fuga se vería
+  // igual pero más chica.
   static defineParams(params) {
     params.define({ id: 'floor.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Piso', group: 'floor' });
     params.define({ id: 'floor.brightness', type: 'float', min: 0, max: 1, default: 1, label: 'Brillo', group: 'floor' });
     params.define({ id: 'floor.laneSpacing', type: 'float', min: 0.1, max: 3, default: 0.7, label: 'Separación carriles (m)', group: 'floor' });
-    params.define({ id: 'floor.dashLength', type: 'float', min: 0.05, max: 3, default: 0.55, label: 'Largo dash (m)', group: 'floor' });
+    params.define({ id: 'floor.dashLength', type: 'float', min: 0.05, max: 3, default: 0.385, label: 'Largo dash (m)', group: 'floor' });
     params.define({ id: 'floor.dashPeriod', type: 'float', min: 0.1, max: 6, default: 1.1, label: 'Período dash (m)', group: 'floor' });
-    params.define({ id: 'floor.dashWidth', type: 'float', min: 0.01, max: 0.5, default: 0.15, label: 'Ancho dash (m)', group: 'floor' });
-    params.define({ id: 'floor.dashHeight', type: 'float', min: 0.002, max: 0.3, default: 0.03, label: 'Alto dash (m)', group: 'floor' });
+    params.define({ id: 'floor.dashWidth', type: 'float', min: 0.01, max: 0.5, default: 0.105, label: 'Ancho dash (m)', group: 'floor' });
+    params.define({ id: 'floor.dashHeight', type: 'float', min: 0.002, max: 0.3, default: 0.021, label: 'Alto dash (m)', group: 'floor' });
     params.define({ id: 'floor.scrollSpeed', type: 'float', min: -5, max: 5, default: 0.6, label: 'Avance (m/s)', group: 'floor' });
     params.define({ id: 'floor.revealDuration', type: 'float', min: 0.1, max: 20, default: 4, label: 'Duración aparición (s)', group: 'floor' });
     params.define({ id: 'floor.fadeFar', type: 'float', min: 5, max: 120, default: 60, label: 'Alcance (m)', group: 'floor' });
@@ -58,7 +62,7 @@ export class Floor {
       const depth = row.mul(u.dashPeriod).sub(mod(u.scroll, u.dashPeriod));
 
       // Se apaga entero al pasarse del alcance o de lo ya revelado (sin fade: pixel puro).
-      const dentro = depth.lessThanEqual(max(u.revealDist, float(0))).and(depth.lessThanEqual(u.fadeFar)).and(depth.greaterThanEqual(-1));
+      const dentro = u.revealDist.greaterThan(0).and(depth.lessThanEqual(max(u.revealDist, float(0)))).and(depth.lessThanEqual(u.fadeFar)).and(depth.greaterThanEqual(-1));
       vVisible.assign(float(dentro));
 
       const size = vec3(u.dashWidth, u.dashHeight, u.dashLength);
@@ -75,9 +79,22 @@ export class Floor {
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
 
-    this.params.onAction('floor.reveal', () => {
+    this.params.onAction('floor.reveal', (mode) => {
+      // Reiniciar también el uniform evita dibujar el piso anterior si la escena cambia
+      // mientras el frame está esperando a la GPU. El scroll arranca siempre en la misma fila.
       this.params.set('floor.revealDist', 0, { immediate: true });
-      this.params.tween('floor.revealDist', this.params.get('floor.fadeFar'), this.params.get('floor.revealDuration'));
+      this.u.revealDist.value = 0;
+      this.scroll = 0;
+      this.u.scroll.value = 0;
+      const far = this.params.target('floor.fadeFar');
+      const eyeZ = Math.max(this.params.get('camera.eyeZ'), 0.01);
+      // En perspectiva los primeros metros ocupan casi toda la pantalla. Animar 0→60 m
+      // dejaba el piso visualmente completo durante el fundido de entrada. Esta inversa
+      // de la proyección hace que el frente avance en pantalla durante TODO el despliegue.
+      const easing = mode === 'perspective'
+        ? (progress) => eyeZ * progress / (eyeZ + far * (1 - progress))
+        : 'smooth';
+      this.params.tween('floor.revealDist', far, this.params.get('floor.revealDuration'), easing);
     });
     this.params.onAction('floor.hide', () => this.params.tween('floor.revealDist', 0, 1.5));
   }
