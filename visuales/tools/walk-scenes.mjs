@@ -45,7 +45,11 @@ await send('Runtime.enable');
 await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 2688, height: 1008, deviceScaleFactor: 1, mobile: false });
 await send('Page.navigate', { url: `${BASE}/` });
-await sleep(8000);
+// Esperar a que `vis` exista en vez de contar segundos: el arranque decodifica
+// el WAV del show y con eso una espera fija se queda corta en máquinas lentas.
+const arranque = Date.now();
+for (let i = 0; i < 300 && !(await evalIn('!!window.vis?.scenes')); i++) await sleep(250);
+console.log(`arranque en ${((Date.now() - arranque) / 1000).toFixed(1)} s`);
 
 const escenas = await evalIn('vis.scenes.list().map(s=>s.id)');
 const filas = [];

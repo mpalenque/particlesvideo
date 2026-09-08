@@ -1,6 +1,6 @@
 import { clamp } from '../core/Tween.js';
 
-export const MAPPINGS_VERSION = 11;
+export const MAPPINGS_VERSION = 16;
 
 // Tabla fuente → destino. Es lo único que traduce MIDI/OSC a escrituras en Params.
 export class Mapper {
@@ -13,6 +13,9 @@ export class Mapper {
     this.monitor = [];               // últimos 50 mensajes
     this.currentScene = null;
     this._listeners = { mappings: [], monitor: [] };
+    // Notas sostenidas por fila en modo `gate`: con una fuente "cualquier nota", el Note Off
+    // de una nota del acorde no puede apagar la compuerta mientras otra sigue sonando.
+    this._held = new Map();
   }
 
   async init() {
@@ -33,7 +36,19 @@ export class Mapper {
           for (const m of upgrades) {
             const index = mappings.findIndex((row) => row.id === m.id);
             if (index < 0) mappings.push(structuredClone(m));
-            else if ((m.updatedIn ?? 0) > savedVersion) mappings[index] = structuredClone(m);
+            else if ((m.updatedIn ?? 0) > savedVersion) {
+              if (m.id === 'full-line' && m.updatedIn === 12) {
+                // La escena 2 conserva su línea autónoma. Corrige sólo el alcance del
+                // antiguo disparo: aprender otra nota no debe perder la fuente elegida.
+                const row = mappings[index];
+                if (row.target === 'line.strike' && row.scenes?.includes('2')) {
+                  const scenes = row.scenes.filter((id) => id !== '2');
+                  if (scenes.length) mappings[index] = { ...row, scenes, updatedIn: 12 };
+                  // Si sólo tenía la 2, conserva la fuente aprendida: una lista vacía
+                  // significaría todas las escenas. El modo loop ignora line.strike.
+                }
+              } else mappings[index] = structuredClone(m);
+            }
           }
         }
 
@@ -98,7 +113,9 @@ export class Mapper {
   }
 
   // Punto de entrada de todo lo que llega de MIDI y OSC.
-  dispatch(msg) {
+  dispatch(msg, { filter } = {}) {
+    if (msg.kind === 'device') { this.releaseDevice(msg.deviceId, msg.channel); return; }
+    if (msg.kind === 'cc' && [120, 123].includes(msg.cc)) this.releaseDevice(msg.deviceId, msg.channel);
     if (this.learnRow != null && isLearnable(msg)) {
       this._assignLearn(msg);
       return;
@@ -107,7 +124,7 @@ export class Mapper {
     const fired = [];
 
     // Rutas OSC automáticas: funcionan sin mapear nada.
-    if (msg.kind === 'osc' && this._autoOsc(msg)) fired.push('(ruta OSC automática)');
+    if (!filter && msg.kind === 'osc' && this._autoOsc(msg)) fired.push('(ruta OSC automática)');
 
     const key = sourceKey(msg.kind === 'note' ? { kind: 'note', channel: msg.channel, note: msg.note }
       : msg.kind === 'cc' ? { kind: 'cc', channel: msg.channel, cc: msg.cc }
@@ -118,6 +135,7 @@ export class Mapper {
     const keys = msg.kind === 'note' ? [key, `note:${msg.channel}:*`] : [key];
     for (const candidate of keys) {
       for (const m of this.index.get(candidate) ?? []) {
+        if (filter && !filter(m)) continue;
         if (!this._sceneAllows(m)) continue;
         if (this._apply(m, msg)) fired.push(m.id);
       }
@@ -150,10 +168,21 @@ export class Mapper {
         this.params.set(m.target, !this.params.target(m.target));
         return true;
 
-      case 'gate':
-        if (p?.type === 'bool') this.params.set(m.target, !!msg.on);
-        else this.params.set(m.target, msg.on ? min + (msg.velocity / 127) * (max - min) : 0);
+      case 'gate': {
+        let on = !!msg.on;
+        if (msg.kind === 'note') {
+          const held = this._held.get(m.id) ?? new Set();
+          const key = JSON.stringify([msg.deviceId ?? '', msg.channel, msg.note]);
+          if (msg.on) held.add(key); else held.delete(key);
+          this._held.set(m.id, held);
+          on = held.size > 0;
+          // Soltar una nota mientras otra sigue apretada no cambia nada.
+          if (!msg.on && on) return true;
+        }
+        if (p?.type === 'bool') this.params.set(m.target, on);
+        else this.params.set(m.target, on ? min + (msg.velocity / 127) * (max - min) : 0);
         return true;
+      }
 
       case 'velocity':
         if (msg.kind === 'note' && !msg.on) return false;
@@ -188,6 +217,27 @@ export class Mapper {
   }
 
   // /p/<id> valor nativo · /pn/<id> 0..1 · /a/<id> acción · /scene id
+  releaseAll() {
+    for (const [id, held] of this._held) {
+      if (!held.size) continue;
+      const row = this.mappings.find(m => m.id === id);
+      if (row && this.params.has(row.target)) this.params.set(row.target, this.params.def(row.target).type === 'bool' ? false : 0);
+    }
+    this._held.clear();
+  }
+
+  releaseDevice(deviceId, channel) {
+    for (const [id, held] of this._held) {
+      let removed = false;
+      for (const key of held) {
+        const [device, ch] = JSON.parse(key);
+        if ((deviceId == null || device === deviceId) && (channel == null || ch === channel)) { held.delete(key); removed = true; }
+      }
+      const row = this.mappings.find(m => m.id === id);
+      if (removed && !held.size && row && this.params.has(row.target)) this.params.set(row.target, this.params.def(row.target).type === 'bool' ? false : 0);
+    }
+  }
+
   _autoOsc(msg) {
     const parts = msg.address.split('/').filter(Boolean);
     const head = parts[0];

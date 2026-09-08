@@ -16,7 +16,7 @@ export class GridBlocks {
     params.define({ id: 'grid.coarse', type: 'bool', default: false, label: 'Celdas gruesas', group: 'grid' });
     params.define({ id: 'grid.scrollSpeed', type: 'float', min: 0, max: 400, default: 12, label: 'Scroll (px/s)', group: 'grid' });
     params.define({ id: 'grid.pixelSnap', type: 'bool', default: true, label: 'Ajuste a píxel', group: 'grid', sceneReset: false });
-    params.define({ id: 'grid.fadeTime', type: 'float', min: 0, max: 2, default: 0.15, label: 'Fade on/off (s)', group: 'grid', sceneReset: false });
+    params.define({ id: 'grid.fadeTime', type: 'float', min: 0, max: 2, default: 0.15, label: 'Fade grilla gruesa (s)', group: 'grid', sceneReset: false });
 
     // Cuánto dura el corrimiento cuando llega el disparo, y cuánto se corre de una vez.
     // Manuel: "no tienen que ser así saltando, sino suave, como que hacen ese offset".
@@ -44,8 +44,7 @@ export class GridBlocks {
     params.defineAction({ id: 'grid.nudgeRandom', label: 'Corrimiento aleatorio por bloques', group: 'grid' });
     params.defineAction({ id: 'grid.randomize', label: 'Offsets al azar (suave)', group: 'grid' });
     params.defineAction({ id: 'grid.offsetReset', label: 'Volver los offsets a cero', group: 'grid' });
-    // Reinicia el dibujo de la grilla y la descubre de arriba hacia abajo. Se usa al entrar a la
-    // 6 para que no herede las líneas que ya estaban completas en la escena anterior.
+    // Descubrimiento opcional de arriba hacia abajo, sólo cuando se dispara explícitamente.
     params.defineAction({ id: 'grid.reveal', label: 'Cargar grilla', group: 'grid', argHint: 'duración en s (opcional)' });
     params.defineAction({ id: 'grid.reveal.cancel', label: 'Completar carga de grilla', group: 'grid' });
   }
@@ -119,8 +118,8 @@ export class GridBlocks {
   }
 
   // El kick arma una combinación nueva: siempre queda por lo menos un bloque prendido y uno
-  // apagado, y nunca repite exactamente el dibujo anterior. El fade normal de cada bloque hace
-  // que el cambio conserve el pulso sin producir un corte áspero.
+  // apagado, y nunca repite exactamente el dibujo anterior. Las grillas finas cambian de golpe
+  // con la nota; la grilla gruesa conserva su fade configurado.
   _randomizeVisibility() {
     const order = this.blocks.map((_, i) => i);
     for (let i = order.length - 1; i > 0; i--) {
@@ -218,8 +217,10 @@ export class GridBlocks {
   }
 
   update(dt) {
-    const opacity = this.params.get('grid.opacity');
     const coarse = this.params.get('grid.coarse');
+    // Las grillas finas entran y salen por corte, incluso si una transición de escena sigue
+    // interpolando la opacidad. Los offsets conservan sus propios tweens de corrimiento.
+    const opacity = coarse ? this.params.get('grid.opacity') : this.params.target('grid.opacity');
     const lineWidth = this.params.get('grid.lineWidth');
     const brightness = this.params.get('grid.brightness');
     const cellW = this.params.get('grid.cellW');
@@ -238,7 +239,8 @@ export class GridBlocks {
     for (const b of this.blocks) {
       const enabled = this.params.get(`grid.b${b.n}.enabled`);
       const target = enabled ? 1 : 0;
-      b.fade += (target - b.fade) * (1 - Math.exp(-dt / fadeTime));
+      if (coarse) b.fade += (target - b.fade) * (1 - Math.exp(-dt / fadeTime));
+      else b.fade = target;
 
       const alpha = b.fade * brightness * opacity;
       b.u.alpha.value = alpha;

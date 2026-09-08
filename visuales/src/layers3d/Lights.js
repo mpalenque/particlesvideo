@@ -39,17 +39,20 @@ export class Lights {
 
   update() {
     const p = this.params;
+    // La escena 21 necesita negros sin rayos. El factor conserva los ajustes de luces del
+    // editor y los recupera al salir; no cambia la lista de luces ni recompila materiales.
+    const stageIntensity = p.get('particles.raysOnly') ? 0 : 1;
 
-    this.ambient.intensity = p.get('light.ambient');
+    this.ambient.intensity = p.get('light.ambient') * stageIntensity;
     const ac = p.get('light.ambientColor');
     if (ac !== this._ambientColor) { this.ambient.color.set(ac); this._ambientColor = ac; }
 
-    this.key.intensity = p.get('light.key');
+    this.key.intensity = p.get('light.key') * stageIntensity;
     this.key.position.set(p.get('light.keyX'), p.get('light.keyY'), p.get('light.keyZ'));
     const kc = p.get('light.keyColor');
     if (kc !== this._keyColor) { this.key.color.set(kc); this._keyColor = kc; }
 
-    this.fill.intensity = p.get('light.fill');
+    this.fill.intensity = p.get('light.fill') * stageIntensity;
     const fc = p.get('light.fillColor');
     if (fc !== this._fillColor) { this.fill.color.set(fc); this._fillColor = fc; }
   }

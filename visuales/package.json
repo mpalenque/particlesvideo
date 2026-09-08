@@ -5,11 +5,16 @@
   "scripts": {
     "postinstall": "npm ci --prefix vendor/radiance",
     "check:radiance": "npm --prefix vendor/radiance run check && node --test tools/radiance-session.test.mjs tools/radiance-preview.test.mjs tools/radiance-mapping.test.mjs",
+    "test:rays": "node --test tools/rays.test.mjs",
+    "check:ray-lighting": "node tools/check-ray-lighting.mjs",
     "dev": "vite --host --port 5173",
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "osc": "node tools/osc-bridge.mjs",
-    "start": "concurrently -k \"npm:dev\" \"npm:osc\""
+    "start": "concurrently -k \"npm:dev\" \"npm:osc\"",
+    "test:parte2": "node --test vendor/parte2/system/*.test.mjs tools/parte2.test.mjs",
+    "check:parte2": "node tools/check-parte2.mjs",
+    "check:parte2:osc": "node tools/check-parte2-osc.mjs"
   },
   "dependencies": {
     "three": "0.176.0",

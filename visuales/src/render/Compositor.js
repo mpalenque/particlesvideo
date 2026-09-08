@@ -125,7 +125,9 @@ export class Compositor {
     this.bloomPass.radius.value = this.params.get('bloom.radius');
     this.bloomPass.threshold.value = this.params.get('bloom.threshold');
     this.uAoAmount.value = has3D && this.params.get('ao.enabled') ? this.params.get('ao.amount') : 0;
-    this.uAoContrast.value = this.params.get('ao.contrast');
+    // En el torbellino reforzar los contactos con las mismas muestras y resolución.
+    // El ajuste del editor queda intacto para todas las demás escenas.
+    this.uAoContrast.value = this.params.get('ao.contrast') * (this.params.get('particles.raysOnly') ? 1.3 : 1);
     this.aoPass.radius.value = this.params.get('ao.distance');
     this.aoPass.thickness.value = this.params.get('ao.thickness');
     this.aoPass.samples.value = this.params.get('ao.samples');

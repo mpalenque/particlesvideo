@@ -123,7 +123,6 @@ export class StickRenderer {
       growTop: uniform(1e5),
     };
     this._color = '';
-    this._bloomOn = null;
   }
 
   async init(scene) {
@@ -195,6 +194,9 @@ export class StickRenderer {
     // trabajar), pero sigue siendo `transparent` para que `particles.opacity` pueda fundirlos
     // en las transiciones de escena. Con alpha 1 se comporta igual que un opaco.
     this.material = new THREE.MeshStandardNodeMaterial({ transparent: true, depthWrite: true });
+    // Mantener el MRT incluso con bloom cero evita compilar otro material al entrar/salir
+    // del torbellino. Se apaga sólo su uniforme, como en los rayos.
+    this.material.mrtNode = mrt({ bloomIntensity: u.bloom });
 
     this.material.positionNode = Fn(() => {
       const particlePosition = particle.get('position');
@@ -226,7 +228,15 @@ export class StickRenderer {
 
     this.material.normalNode = Fn(() => {
       const mat = calcLookAtMatrix(particle.get('direction').xyz);
-      return transformNormalToView(mat.mul(normalLocal));
+      const local = attribute('position').xyz;
+      const tailScale = mix(float(1).sub(u.taper), float(1), alongStick(local.z));
+      // Inversa transpuesta del escalado y del estrechamiento de la cola. Rotar la normal
+      // original sin esta corrección ilumina mal los biseles y también alimenta mal el AO.
+      const n = normalLocal.div(u.scale).toVar();
+      n.xy.divAssign(tailScale);
+      n.z.subAssign(normalLocal.xy.dot(local.xy).mul(u.taper.div(GEO.length))
+        .div(tailScale.mul(u.scale.z)));
+      return transformNormalToView(normalize(mat.mul(n)));
     })();
 
     // Color base de la escena, mezclado a blanco según la velocidad (pedido del storyboard).
@@ -308,7 +318,8 @@ export class StickRenderer {
     this.u.whiteJitter.value = p.get('particles.whiteJitter');
     this.u.roughness.value = p.get('particles.roughness');
     this.u.metalness.value = p.get('particles.metalness');
-    this.u.emissive.value = p.get('particles.emissive');
+    const raysOnly = p.get('particles.raysOnly');
+    this.u.emissive.value = raysOnly ? 0 : p.get('particles.emissive');
     this.u.flicker.value = p.get('particles.flicker');
     this.phase = (this.phase ?? 0) + dt * p.get('particles.flickerRate') * Math.PI * 2;
     this.u.flickerPhase.value = this.phase;
@@ -338,13 +349,7 @@ export class StickRenderer {
       }
     }
 
-    const bloom = p.get('particles.bloom') > 0.001;
-    if (bloom !== this._bloomOn) {
-      this._bloomOn = bloom;
-      this.material.mrtNode = bloom ? mrt({ bloomIntensity: this.u.bloom }) : null;
-      this.material.needsUpdate = true;
-    }
-    this.u.bloom.value = p.get('particles.bloom');
+    this.u.bloom.value = raysOnly ? 0 : p.get('particles.bloom');
   }
 
   dispose() {

@@ -40,7 +40,7 @@ afterEach(() => {
 const edits = () => channel.sent.filter((message) => message.t === 'fluids:document');
 
 describe('remote timeline document and transport', () => {
-  it('never echoes an output document or creates local playback', () => {
+  it('never echoes an output document and never plays sound of its own', () => {
     transport.updateDocument(doc());
     vi.advanceTimersByTime(600);
     expect(edits()).toHaveLength(0);
@@ -52,11 +52,12 @@ describe('remote timeline document and transport', () => {
     expect(transport.state.audioMode).toBe('external');
   });
 
-  it('normalizes legacy audio preferences to external without enabling sound', () => {
-    channel.deliver({ t: 'fluids:state', state: { audioMode: 'local', audioReady: true } });
-    expect(transport.state.audioMode).toBe('external');
-    expect(transport.state.audioReady).toBe(false);
-    transport.command('audio-mode', 'local');
+  it('mirrors the output audio mode and forwards the requested one untouched', () => {
+    channel.deliver({ t: 'fluids:state', state: { audioMode: 'web', audioReady: true, audioBlocked: true } });
+    expect(transport.state.audioMode).toBe('web');
+    expect(transport.state.audioReady).toBe(true);
+    expect(transport.state.audioBlocked).toBe(true);
+    transport.command('audio-mode', 'external');
     expect(channel.sent.at(-1)).toMatchObject({ command: 'audio-mode', value: 'external' });
   });
 

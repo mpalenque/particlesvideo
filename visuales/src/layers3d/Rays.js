@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform, mrt } from 'three/tsl';
 import { MAX_REPULSORS } from './particles/Forces.js';
+import { RayPointLight, RayPointLightNode } from './RayPointLight.js';
 
 // Un slot de repulsor por rayo, desde que cae hasta que se apaga el impacto. Con los valores
 // por defecto cada rayo ocupa su slot ~1.2 s (0.68 s de caída + 0.55 s de onda), así que la
@@ -15,8 +16,10 @@ export class Rays {
     params.define({ id: 'rays.opacity', type: 'float', min: 0, max: 1, default: 0, label: 'Opacidad', group: 'rays' });
     params.define({ id: 'rays.fallSpeed', type: 'float', min: 0.5, max: 30, default: 6, label: 'Velocidad (m/s)', group: 'rays' });
     params.define({ id: 'rays.length', type: 'float', min: 0.1, max: 4, default: 0.8, label: 'Largo (m)', group: 'rays' });
-    // Un centímetro proyecta unos 2–3 px en la pantalla: el rayo debe leerse como una línea.
-    params.define({ id: 'rays.width', type: 'float', min: 0.002, max: 0.5, default: 0.014, label: 'Ancho (m)', group: 'rays' });
+    // Tres veces el ancho anterior (0.014 m), con la misma geometría y cantidad de dibujos.
+    params.define({ id: 'rays.width', type: 'float', min: 0.002, max: 0.5, default: 0.042, label: 'Ancho (m)', group: 'rays' });
+    params.define({ id: 'rays.lightIntensity', type: 'float', min: 0, max: 30, default: 8, label: 'Luz del rayo', group: 'rays' });
+    params.define({ id: 'rays.lightRange', type: 'float', min: 0.1, max: 6, default: 2.6, label: 'Alcance de luz (m)', group: 'rays' });
     params.define({ id: 'rays.startY', type: 'float', min: 3, max: 8, default: 4.5, label: 'Altura inicial (m)', group: 'rays' });
     params.define({ id: 'rays.zMin', type: 'float', min: -5, max: 0, default: -2.5, label: 'Z mínimo (m)', group: 'rays' });
     params.define({ id: 'rays.zMax', type: 'float', min: -5, max: 0, default: -0.5, label: 'Z máximo (m)', group: 'rays' });
@@ -64,18 +67,22 @@ export class Rays {
     // El bloom cambia por uniforme: apagarlo no debe compilar otro shader durante un golpe.
     this.material.mrtNode = mrt({ bloomIntensity: this.uBloom });
 
-    // Una sola línea blanca por rayo, como en el diseño original. Las envolventes añadidas
-    // ensanchaban el trazo hasta ocho veces y triplicaban las llamadas de dibujo. Tampoco
-    // agregamos PointLights: alternar su cantidad recompilaba los materiales de los palitos
-    // durante los golpes; la interacción visible sigue en las fuerzas y las esquirlas.
+    // Un solo trazo y una luz por slot. Nunca añadir/quitar luces ni cambiar su `visible`
+    // durante el show: cambiar la lista recompila los materiales en medio de los golpes.
+    this.ctx.renderer.library.addLight(RayPointLightNode, RayPointLight);
     this.geometry = new THREE.BoxGeometry(1, 1, 1);
     this.bars = [];
+    this.lights = [];
     for (let i = 0; i < POOL; i++) {
       const bar = new THREE.Mesh(this.geometry, this.material);
       bar.visible = false;
       bar.renderOrder = 2;
       scene.add(bar);
       this.bars.push(bar);
+      const light = new RayPointLight(0xffffff, 0, this.params.get('rays.lightRange'), 2);
+      light.castShadow = false;
+      scene.add(light);
+      this.lights.push(light);
     }
 
     this.params.onAction('ray.spawn', (arg) => this.spawn(arg));
@@ -123,6 +130,7 @@ export class Rays {
     // golpe recibido antes de la 16 no puede reaparecer al volver a habilitarlos después.
     if (!p.get('rays.enabled')) {
       for (const bar of this.bars) bar.visible = false;
+      for (const light of this.lights) light.intensity = 0;
       for (let i = 0; i < POOL; i++) forces.clearRepulsor(i);
       this.rays.length = 0;
       this.uOpacity.value = 0;
@@ -134,6 +142,8 @@ export class Rays {
     const width = p.get('rays.width');
     const speed = p.get('rays.fallSpeed');
     const floorY = length / 2;
+    const lightIntensity = p.get('rays.lightIntensity') * opacity;
+    const lightRange = p.get('rays.lightRange');
 
     this.uOpacity.value = opacity;
 
@@ -146,6 +156,11 @@ export class Rays {
     this.uBloom.value = p.get('rays.bloom');
 
     for (const bar of this.bars) bar.visible = false;
+    for (const light of this.lights) {
+      light.intensity = 0;
+      light.distance = lightRange;
+      light.color.copy(this.uColor.value);
+    }
     for (let i = 0; i < POOL; i++) forces.clearRepulsor(i);
 
     const survivors = [];
@@ -162,6 +177,8 @@ export class Rays {
         if (r.shock >= shockTime) continue;
         const u = r.shock / shockTime;
         const caida = (1 - u) * (1 - u);
+        // El impacto conserva una cola corta de luz, con la misma envolvente que la onda.
+        this._light(r, floorY, lightIntensity * caida);
         // El anillo no arranca en radio 0: con `u` a secas, el primer frame de la onda tiene la
         // fuerza máxima sobre un radio de 2 cm y no toca a nadie. Arrancando en el 25 % del radio
         // el golpe agarra masa desde el primer frame, que es cuando la fuerza vale más.
@@ -174,12 +191,14 @@ export class Rays {
       if (r.y <= floorY) {
         r.y = floorY;
         r.shock = 0;
+        this._light(r, floorY, lightIntensity);
         this.ctx.debris?.burst(r.x, r.z);
         survivors.push(r);
         continue;
       }
 
       forces.setRepulsor(r.slot, r.x, r.y - length / 2, r.z, r.y + length / 2, p.get('rays.repelStrength'), p.get('rays.repelRadius'));
+      this._light(r, r.y, lightIntensity);
 
       if (opacity > 0.001) {
         const bar = this.bars[r.slot];
@@ -192,7 +211,15 @@ export class Rays {
     this.rays = survivors;
   }
 
+  _light(ray, y, intensity) {
+    const light = this.lights[ray.slot];
+    light.position.set(ray.x, y, ray.z);
+    light.intensity = intensity;
+  }
+
   dispose() {
+    for (const light of this.lights) { light.intensity = 0; light.removeFromParent(); light.dispose(); }
+    for (const bar of this.bars) bar.removeFromParent();
     this.geometry.dispose();
     this.material.dispose();
   }

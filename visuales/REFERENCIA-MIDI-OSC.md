@@ -1,13 +1,13 @@
 # Referencia MIDI / OSC — Visuales LED
 
-Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
+Generado 7/9/2026, 11:16:51 desde el registro de parámetros.
 
 ## Escenas
 
 | id | nombre | fuente MIDI/OSC |
 |---|---|---|
 | 1 | Placa de advertencia | Nota 1 ch10 |
-| 2 | Marco + línea trueno | Nota 2 ch10 |
+| 2 | Marco + línea móvil | Nota 2 ch10 |
 | 3 | Grilla gruesa por bloque | Nota 3 ch10 |
 | 4 | Grillas finas | Nota 4 ch10 |
 | 5 | Grillas finas (negativa de la 4) | Nota 5 ch10 |
@@ -31,7 +31,7 @@ Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
 | 23 | A punto de explotar | Nota 23 ch10 |
 | 24 | Fluids · previa | Nota 24 ch10 |
 | 25 | Fluids · secuencia | Nota 25 ch10 |
-| 26 | Libre 3 | Nota 26 ch10 |
+| 26 | Fluids · final reactivo | Nota 26 ch10 |
 | 27 | Libre 4 | Nota 27 ch10 |
 | 28 | Libre 5 | Nota 28 ch10 |
 | 29 | Libre 6 | Nota 29 ch10 |
@@ -110,7 +110,7 @@ Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
 | `grid.coarse` | Celdas gruesas | bool | false \| true | `/p/grid/coarse` | `/pn/grid/coarse` |  |
 | `grid.scrollSpeed` | Scroll (px/s) | float | 0 .. 400 | `/p/grid/scrollSpeed` | `/pn/grid/scrollSpeed` |  |
 | `grid.pixelSnap` | Ajuste a píxel | bool | false \| true | `/p/grid/pixelSnap` | `/pn/grid/pixelSnap` |  |
-| `grid.fadeTime` | Fade on/off (s) | float | 0 .. 2 | `/p/grid/fadeTime` | `/pn/grid/fadeTime` |  |
+| `grid.fadeTime` | Fade grilla gruesa (s) | float | 0 .. 2 | `/p/grid/fadeTime` | `/pn/grid/fadeTime` |  |
 | `grid.offsetTime` | Corrimiento: duración (s) | float | 0 .. 3 | `/p/grid/offsetTime` | `/pn/grid/offsetTime` |  |
 | `grid.offsetStep` | Corrimiento: paso (px) | float | 1 .. 1008 | `/p/grid/offsetStep` | `/pn/grid/offsetStep` |  |
 | `grid.offsetEase` | Corrimiento: curva | enum | smooth \| out \| linear | `/p/grid/offsetEase` | `/pn/grid/offsetEase` |  |
@@ -364,6 +364,8 @@ Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
 | `rays.fallSpeed` | Velocidad (m/s) | float | 0.5 .. 30 | `/p/rays/fallSpeed` | `/pn/rays/fallSpeed` |  |
 | `rays.length` | Largo (m) | float | 0.1 .. 4 | `/p/rays/length` | `/pn/rays/length` |  |
 | `rays.width` | Ancho (m) | float | 0.002 .. 0.5 | `/p/rays/width` | `/pn/rays/width` |  |
+| `rays.lightIntensity` | Luz del rayo | float | 0 .. 30 | `/p/rays/lightIntensity` | `/pn/rays/lightIntensity` |  |
+| `rays.lightRange` | Alcance de luz (m) | float | 0.1 .. 6 | `/p/rays/lightRange` | `/pn/rays/lightRange` |  |
 | `rays.startY` | Altura inicial (m) | float | 3 .. 8 | `/p/rays/startY` | `/pn/rays/startY` |  |
 | `rays.zMin` | Z mínimo (m) | float | -5 .. 0 | `/p/rays/zMin` | `/pn/rays/zMin` |  |
 | `rays.zMax` | Z máximo (m) | float | -5 .. 0 | `/p/rays/zMax` | `/pn/rays/zMax` |  |
@@ -404,6 +406,7 @@ Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
 | `particles.viscosity` | Viscosidad | float | 0.01 .. 0.4 | `/p/particles/viscosity` | `/pn/particles/viscosity` |  |
 | `particles.gravityY` | Gravedad Y | float | -1 .. 1 | `/p/particles/gravityY` | `/pn/particles/gravityY` |  |
 | `particles.bloom` | Bloom | float | 0 .. 1 | `/p/particles/bloom` | `/pn/particles/bloom` |  |
+| `particles.raysOnly` | Iluminar sólo con rayos | bool | false \| true | `/p/particles/raysOnly` | `/pn/particles/raysOnly` |  |
 | `particles.ageGrow` | Crecer con la edad (s) | float | 0.05 .. 6 | `/p/particles/ageGrow` | `/pn/particles/ageGrow` |  |
 | `particles.sizeJitter` | Variación de tamaño | float | 0 .. 1 | `/p/particles/sizeJitter` | `/pn/particles/sizeJitter` |  |
 | `particles.taper` | Punta (cola más fina) | float | 0 .. 0.95 | `/p/particles/taper` | `/pn/particles/taper` |  |
@@ -478,31 +481,63 @@ Generado 6/9/2026, 12:53:12 desde el registro de parámetros.
 
 | id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
 |---|---|---|---|---|---|---|
-| `fluids.audioMode` | Audio externo · Ableton | enum | external | `/p/fluids/audioMode` | `/pn/fluids/audioMode` |  |
+| `fluids.audioMode` | Audio del show (web = desde la página) | enum | web \| external | `/p/fluids/audioMode` | `/pn/fluids/audioMode` |  |
+| `fluids.volume` | Volumen del track | float | 0 .. 1 | `/p/fluids/volume` | `/pn/fluids/volume` |  |
+| `fluids.gain` | Ganancia de luz · Fluids | float | 0.4 .. 2.5 | `/p/fluids/gain` | `/pn/fluids/gain` |  |
+| `fluids.supersample` | Supersampling (2 = sin rayado) | float | 1 .. 2 | `/p/fluids/supersample` | `/pn/fluids/supersample` |  |
 | `fluids.arm` | Preparar motor Fluids | acción |  | `/a/fluids/arm` |  |  |
 | `fluids.standby` | Previa · escena 24 | acción |  | `/a/fluids/standby` |  |  |
 | `fluids.play` | Play · escena 25 | acción |  | `/a/fluids/play` |  |  |
 | `fluids.pause` | Pausa · escena 25 | acción |  | `/a/fluids/pause` |  |  |
 | `fluids.restart` | Reiniciar · escena 25 | acción |  | `/a/fluids/restart` |  |  |
 | `fluids.seek` | Buscar · escena 25 | acción | segundos | `/a/fluids/seek` |  |  |
+| `fluids.live` | Final reactivo · escena 26 | acción |  | `/a/fluids/live` |  |  |
 
 ### fluids.live
 
 | id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
 |---|---|---|---|---|---|---|
-| `fluids.live.emission` | Emisión · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/emission` | `/pn/fluids/live/emission` |  |
-| `fluids.live.x` | Emisor X · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/x` | `/pn/fluids/live/x` |  |
-| `fluids.live.y` | Emisor Y · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/y` | `/pn/fluids/live/y` |  |
-| `fluids.live.hue` | Color del emisor · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/hue` | `/pn/fluids/live/hue` |  |
-| `fluids.live.gravity` | Gravedad · motor libre (sin escena asignada) | float | -1 .. 1 | `/p/fluids/live/gravity` | `/pn/fluids/live/gravity` |  |
-| `fluids.live.viscosity` | Viscosidad · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/viscosity` | `/pn/fluids/live/viscosity` |  |
-| `fluids.live.cohesion` | Cohesión · motor libre (sin escena asignada) | float | 0 .. 1 | `/p/fluids/live/cohesion` | `/pn/fluids/live/cohesion` |  |
-| `fluids.live.light` | Luz · motor libre (sin escena asignada) | float | 0 .. 3 | `/p/fluids/live/light` | `/pn/fluids/live/light` |  |
-| `fluids.live.forceX` | Fuerza X · motor libre (sin escena asignada) | float | -1 .. 1 | `/p/fluids/live/forceX` | `/pn/fluids/live/forceX` |  |
-| `fluids.live.forceY` | Fuerza Y · motor libre (sin escena asignada) | float | -1 .. 1 | `/p/fluids/live/forceY` | `/pn/fluids/live/forceY` |  |
+| `fluids.live.emission` | Emisión · motor libre (sin escena) | float | 0 .. 0.25 | `/p/fluids/live/emission` | `/pn/fluids/live/emission` |  |
+| `fluids.live.x` | Emisor X · motor libre (sin escena) | float | 0 .. 1 | `/p/fluids/live/x` | `/pn/fluids/live/x` |  |
+| `fluids.live.y` | Emisor Y · motor libre (sin escena) | float | 0 .. 1 | `/p/fluids/live/y` | `/pn/fluids/live/y` |  |
+| `fluids.live.hue` | Color del emisor · motor libre (sin escena) | float | 0 .. 1 | `/p/fluids/live/hue` | `/pn/fluids/live/hue` |  |
+| `fluids.live.gravity` | Gravedad · motor libre (sin escena) | float | -1 .. 1 | `/p/fluids/live/gravity` | `/pn/fluids/live/gravity` |  |
+| `fluids.live.viscosity` | Viscosidad · motor libre (sin escena) | float | 0 .. 1 | `/p/fluids/live/viscosity` | `/pn/fluids/live/viscosity` |  |
+| `fluids.live.cohesion` | Cohesión · motor libre (sin escena) | float | 0 .. 1 | `/p/fluids/live/cohesion` | `/pn/fluids/live/cohesion` |  |
+| `fluids.live.light` | Luz · motor libre (sin escena) | float | 0 .. 3 | `/p/fluids/live/light` | `/pn/fluids/live/light` |  |
+| `fluids.live.forceX` | Fuerza X · motor libre (sin escena) | float | -1 .. 1 | `/p/fluids/live/forceX` | `/pn/fluids/live/forceX` |  |
+| `fluids.live.forceY` | Fuerza Y · motor libre (sin escena) | float | -1 .. 1 | `/p/fluids/live/forceY` | `/pn/fluids/live/forceY` |  |
 | `fluids.live.burst` | Ráfaga · motor libre | acción | cantidad de partículas | `/a/fluids/live/burst` |  |  |
 | `fluids.live.attractor` | Atractor · motor libre | acción |  | `/a/fluids/live/attractor` |  |  |
 | `fluids.live.reset` | Reiniciar fluido · motor libre | acción |  | `/a/fluids/live/reset` |  |  |
+
+### fluids.seq
+
+| id | etiqueta | tipo | rango | OSC | OSC 0..1 | fuente MIDI/OSC |
+|---|---|---|---|---|---|---|
+| `fluids.seq.gravity` | Gravedad (curva) · final reactivo (26) | float | -1 .. 1 | `/p/fluids/seq/gravity` | `/pn/fluids/seq/gravity` |  |
+| `fluids.seq.cohesion` | Atasco (curva) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/cohesion` | `/pn/fluids/seq/cohesion` |  |
+| `fluids.seq.viscosity` | Viscosidad (curva) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/viscosity` | `/pn/fluids/seq/viscosity` |  |
+| `fluids.seq.light` | Luz de las partículas (curva) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/light` | `/pn/fluids/seq/light` |  |
+| `fluids.seq.exposure` | Exposición (curva) · final reactivo (26) | float | 0 .. 2 | `/p/fluids/seq/exposure` | `/pn/fluids/seq/exposure` |  |
+| `fluids.seq.bodies` | Cuerpos (curva) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/bodies` | `/pn/fluids/seq/bodies` |  |
+| `fluids.seq.grid` | Losetas todas chicas (> 0,5) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/grid` | `/pn/fluids/seq/grid` |  |
+| `fluids.seq.mono` | Monocromo · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/mono` | `/pn/fluids/seq/mono` |  |
+| `fluids.seq.tileLife` | Vida de las losetas y del congelado (negras) · final reactivo (26) | float | 0.25 .. 32 | `/p/fluids/seq/tileLife` | `/pn/fluids/seq/tileLife` |  |
+| `fluids.seq.amb` | amb 1 sostenido → glow azul · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/amb` | `/pn/fluids/seq/amb` | Cualquier nota ch11 |
+| `fluids.seq.attract` | atractor sostenido (canal 3) · final reactivo (26) | float | 0 .. 1 | `/p/fluids/seq/attract` | `/pn/fluids/seq/attract` | Cualquier nota ch3 |
+| `fluids.seq.pulse` | Pulso · flash + empujón desde el centro · final reactivo (26) | acción |  | `/a/fluids/seq/pulse` |  | Nota 0 ch1 |
+| `fluids.seq.strobe` | Relámpago · sortea y destella las 4 losetas emisivas · final reactivo (26) | acción |  | `/a/fluids/seq/strobe` |  | Nota 2 ch1 |
+| `fluids.seq.step` | Paso cruzado de las losetas · segundo kick · final reactivo (26) | acción |  | `/a/fluids/seq/step` |  | Nota 2 ch1 |
+| `fluids.seq.tile` | Loseta · 50 cm o 1 m según la serie · final reactivo (26) | acción |  | `/a/fluids/seq/tile` |  | Nota 4 ch1 |
+| `fluids.seq.tileBig` | Loseta · 1 m · final reactivo (26) | acción |  | `/a/fluids/seq/tileBig` |  | Nota 40 ch2 |
+| `fluids.seq.sweep` | Barrido de sombra · final reactivo (26) | acción |  | `/a/fluids/seq/sweep` |  | Nota 38 ch2 |
+| `fluids.seq.crack` | Fractura en el centro de masa · final reactivo (26) | acción |  | `/a/fluids/seq/crack` |  | Nota 39 ch2, Nota 49 ch2 |
+| `fluids.seq.dark` | Apagón 0,3 s · final reactivo (26) | acción |  | `/a/fluids/seq/dark` |  | Nota 47 ch2 |
+| `fluids.seq.freeze` | Congelar el fluido (vida de loseta) · final reactivo (26) | acción |  | `/a/fluids/seq/freeze` |  | Nota 45 ch2 |
+| `fluids.seq.flip` | Sortear qué losetas emiten (sin destello) · final reactivo (26) | acción |  | `/a/fluids/seq/flip` |  | Nota 38 ch2 |
+| `fluids.seq.clear` | Borrar losetas · final reactivo (26) | acción |  | `/a/fluids/seq/clear` |  |  |
+| `fluids.seq.reset` | Vaciar el fluido · final reactivo (26) | acción |  | `/a/fluids/seq/reset` |  |  |
 
 ## Rutas OSC automáticas (sin mapear nada)
 

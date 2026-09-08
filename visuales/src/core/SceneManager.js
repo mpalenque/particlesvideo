@@ -48,12 +48,13 @@ export class SceneManager {
 
   // `force` re-entra a la escena aunque ya sea la actual. Nadie lo usa en el show; está para
   // poder pedir un re-disparo a mano desde la consola (`vis.scenes.goto('10', {force:true})`).
-  goto(id, { transition, force = false, radianceReady = false } = {}) {
+  goto(id, { transition, force = false, radianceReady = false, parte2Ready = false, parte2Manual = false } = {}) {
     const scene = this.byId.get(id);
     if (!scene) { console.error(`[vis] escena desconocida: ${id}`); return; }
+    if (this.ctx.parte2?.requestScene(id, { transition, force, parte2Ready, parte2Manual })) return;
     if (this.ctx.radiance?.requestScene(id, { transition, force, radianceReady })) return;
 
-    // UNA NOTA DE LA ESCENA EN CURSO NO LA VUELVE A DISPARAR (pedido de Manuel: *"si llega una
+    // UNA NOTA DE LA ESCENA EN CURSO NO LA REINICIA (pedido de Manuel: *"si llega una
     // nota para controlar la escena, hasta que no cambie de escena tiene que seguir en esa
     // escena y no volver a triggerearla, porque quizás llegan varias notas de la escena juntas,
     // pero es por seguridad"*).
@@ -65,7 +66,12 @@ export class SceneManager {
     //
     // Va acá y no en el Mapper a propósito: así vale para TODO lo que pueda pedir una escena
     // (MIDI, OSC, la barra de escenas, el teclado), no solo para las notas.
-    if (id === this.current && !force) return;
+    if (id === this.current && !force) {
+      // Excepción explícita por escena: la 7 vuelve a desplegar sólo el piso. No vuelve
+      // a aplicar presets ni acciones de entrada, ni reinicia las grillas o los motores.
+      scene.onRetrigger?.(this.ctx);
+      return;
+    }
 
     const prev = this.byId.get(this.current);
     if (prev?.onExit) prev.onExit(this.ctx);

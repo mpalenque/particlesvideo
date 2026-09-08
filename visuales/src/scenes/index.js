@@ -14,6 +14,10 @@ import { STAGE } from '../config/stage.js';
 // `mainAction` es lo que dispara la barra espaciadora.
 // Celdas cuadradas (Manuel las pidió cuadradas; el storyboard las tenía rectangulares).
 const GRID_FINE = { 'grid.cellW': 84, 'grid.cellH': 84 };
+// La nota cambia la visibilidad y el dibujo fino en el primer frame. Los corrimientos
+// de offsets conservan su animación independiente; no son un fade de aparición.
+const GRID_CUT = { 'grid.opacity': 0, 'grid.brightness': 0,
+  'grid.cellW': 0, 'grid.cellH': 0, 'grid.lineWidth': 0 };
 
 // Config de los cinco bloques de grilla: [encendido, sentido, ×velocidad, offset Y en px].
 //
@@ -53,7 +57,7 @@ const BLOQUES_PARES = [
   [false, -1, 0.90,  10],
 ];
 
-// El trueno de la 2 sigue disponible en la 3, 4, 5, 6 y 9. Con `line.maxLines` en 1 cada nota
+// Los truenos siguen disponibles en la 3, 4, 5, 6 y 9. Con `line.maxLines` en 1 cada nota
 // mataba la línea anterior de golpe y la cola no llegaba a verse nunca; con 3 los golpes
 // rápidos se superponen y el que sale por el borde se apaga con su propio fade.
 const TRUENO = { 'line.opacity': 1, 'line.mode': 'strike', 'line.maxLines': 3, 'line.fadeOut': 0.6 };
@@ -240,19 +244,18 @@ export const SCENES = [
     mainAction: 'warning.pulse',
   },
   {
-    id: '2', name: 'Marco + línea trueno', transition: 3.0,
+    id: '2', name: 'Marco + línea móvil', transition: 3.0,
     params: {
       'frame.opacity': 1, 'frame.color': '#7A0000',
-      ...TRUENO, 'line.speed': 30,
+      'line.opacity': 1, 'line.mode': 'loop', 'line.speed': 70,
+      'line.maxLines': 1, 'line.wrap': true,
       'line.orientation': 'vertical', 'line.width': 3, 'line.direction': 1,
     },
-    // El marco conserva la entrada lenta de 3 s, pero el trueno tiene que leerse desde el
-    // primer golpe: con el mismo tween recién llegaba a 8% de opacidad a los 500 ms.
-    // El sentido debe estar aplicado antes del strike: un valor anterior de 0 lo
-    // hacía nacer en el borde derecho y salir de pantalla durante el fundido.
-    transitions: { 'line.opacity': 0.12, 'line.direction': 0, 'line.width': 0 },
-    actions: [['line.strike', 'edge']],
-    mainAction: ['line.strike', 'edge'],
+    // Arranca sola, completa y en movimiento aunque no llegue ninguna nota. Sólo el
+    // marco conserva el fundido de 3 s; la nota invierte la línea que ya está viajando.
+    transitions: { 'line.opacity': 0.12, 'line.direction': 0, 'line.width': 0,
+      'line.speed': 0, 'line.maxLines': 0 },
+    mainAction: 'line.flip',
   },
   {
     id: '3', name: 'Grilla gruesa por bloque', transition: 1.0,
@@ -281,6 +284,8 @@ export const SCENES = [
       'grid.opacity': 1, 'grid.coarse': false, ...GRID_FINE, 'grid.brightness': 0.6, 'grid.scrollSpeed': 12,
       ...gridBlocks(BLOQUES_IMPARES),
     },
+    transitions: GRID_CUT,
+    actions: ['grid.reveal.cancel'],
     mainAction: 'grid.toggleAll',
   },
   {
@@ -292,6 +297,8 @@ export const SCENES = [
       ...gridBlocks(BLOQUES_PARES),
       'sweep.enabled': true, 'sweep.opacity': 1,
     },
+    transitions: GRID_CUT,
+    actions: ['grid.reveal.cancel'],
     mainAction: 'grid.toggleAll',
   },
   {
@@ -303,30 +310,30 @@ export const SCENES = [
       ...gridBlocks(BLOQUES_IMPARES),
       'sweep.enabled': true, 'sweep.opacity': 1,
     },
-    // Aunque venga de la 4 o de la 5, la grilla no hereda el dibujo terminado: se vuelve a
-    // cargar de arriba hacia abajo durante 1.8 s. Al salir se completa, para no arrastrar una
-    // carga a medias a otra escena que también use grilla.
-    actions: [['grid.reveal', 1.8]],
-    onExit: (ctx) => ctx.params.trigger('grid.reveal.cancel'),
+    // La grilla fina también entra completa en la 6, sin la carga gradual anterior.
+    transitions: GRID_CUT,
+    actions: ['grid.reveal.cancel'],
     mainAction: ['sweep.blue', 'random'],
   },
   {
     // Las hileras del PISO 3D se reinician en cada entrada. El avance se mide en perspectiva
-    // para que los nueve segundos se vean en pantalla, sin gastar casi todo el despliegue
+    // para que los dieciséis segundos se vean en pantalla, sin gastar casi todo el despliegue
     // en los metros lejanos que quedan comprimidos junto al horizonte.
     id: '7', name: 'Piso con fuga (+ grilla)', transition: 2.0,
     params: {
       'layer3d.opacity': 1, 'floor.opacity': 1, 'floor.scrollSpeed': 0.6,
-      'floor.revealDist': 0, 'floor.revealDuration': 9,
+      'floor.revealDist': 0, 'floor.revealDuration': 16,
       'grid.opacity': 1, 'grid.coarse': false, ...GRID_FINE, 'grid.brightness': 0.26, 'grid.scrollSpeed': 5,
       ...gridBlocks(BLOQUES_IMPARES),
       'sweep.enabled': true, 'sweep.opacity': 1,
     },
     // La acción consulta la duración al entrar, así que este param debe llegar de inmediato y
     // no heredarse/tweenear desde los 4 s de fábrica.
-    transitions: { 'floor.revealDist': 0, 'floor.revealDuration': 0 },
-    actions: [['floor.reveal', 'perspective']],
-    mainAction: 'grid.toggleAll',      // las grillas 2D pueden volver a jugar encima
+    transitions: { ...GRID_CUT, 'floor.revealDist': 0, 'floor.revealDuration': 0,
+      'floor.opacity': 0, 'layer3d.opacity': 0 },
+    actions: ['grid.reveal.cancel', ['floor.reveal', 'perspective']],
+    onRetrigger: ({ params }) => params.trigger('floor.reveal', 'perspective'),
+    mainAction: ['floor.reveal', 'perspective'],
   },
   {
     // 8 y 9 no están en el storyboard. En vez de dejarlas como copias mudas de la 7, cada una
@@ -339,6 +346,8 @@ export const SCENES = [
       ...gridBlocks(BLOQUES_PARES),
       'sweep.enabled': true, 'sweep.opacity': 1,
     },
+    transitions: GRID_CUT,
+    actions: ['grid.reveal.cancel'],
     mainAction: ['sweep.blue', 'random'],
   },
   {
@@ -637,6 +646,9 @@ export const SCENES = [
       'box.visible': 0, 'box.enabled': false,
       'rays.enabled': true, 'rays.opacity': 1, 'debris.opacity': 1,
       'particles.opacity': 1, 'particles.baseColor': '#FF0000', 'particles.whiteEnabled': false,
+      // La masa recibe sólo la luz puntual de los rayos: sin emisión, luces de estudio ni
+      // bloom propio que vuelva a rellenar los huecos oscuros entre palitos.
+      'particles.raysOnly': true, 'particles.emissive': 0, 'particles.bloom': 0,
       'particles.turbulence': 0.7, 'particles.drag': 0.08,
       // NO usar `vortex.lift` acá. Se probó (0.15, 0.35, 0.55 y 0.7, con y sin `gravityY` para
       // compensar): el ascenso es una fuerza en un solo sentido y nada la devuelve, así que la
@@ -651,7 +663,8 @@ export const SCENES = [
       'field.amount': 0, 'field.align': 0,
     },
     transitions: { ...COLOR_RAPIDO, 'vortex.swirl': 0, 'vortex.pull': 0, 'vortex.radius': 0,
-      'vortex.cutoff': 0, 'vortex.response': 0, 'field.amount': 0, 'field.align': 0 },
+      'vortex.cutoff': 0, 'vortex.response': 0, 'field.amount': 0, 'field.align': 0,
+      'particles.emissive': 0, 'particles.bloom': 0 },
     onExit: ({ params }) => params.set('vortex.response', 0, { immediate: true }),
     mainAction: 'particles.kick',
   },
@@ -731,7 +744,18 @@ export const SCENES = [
   // Las escenas 26–29 siguen libres con su MIDI existente.
   { id: '24', name: 'Fluids · previa', transition: 0, params: {}, mainAction: 'fluids.play' },
   { id: '25', name: 'Fluids · secuencia', transition: 0, params: {}, mainAction: 'fluids.play' },
-  ...Array.from({ length: 4 }, (_, i) => ({
-    id: String(26 + i), name: `Libre ${i + 3}`, transition: 1.0, params: {},
+  {
+    // EL FINAL DE LA 25, no una escena nueva (Manuel: *"va a partir de la escena
+    // 25 solo q ahora va a reaccionar a midis de mi ableton"*). Hereda el fluido,
+    // el director y el documento tal como quedaron, y desde la nota 26 lo que
+    // manda son las notas de JEJE FLUID (`fluids.seq.*`, mapeadas en
+    // `mappings.default.json`) y los faders `fluids.seq.*`, que al entrar se
+    // cargan con lo que las curvas del documento valen en ese instante. Por eso
+    // no lista params: nada de acá puede pisar el estado que trae la 25.
+    id: '26', name: 'Fluids · final reactivo', transition: 0, params: {},
+    mainAction: 'fluids.seq.pulse',
+  },
+  ...Array.from({ length: 3 }, (_, i) => ({
+    id: String(27 + i), name: `Libre ${i + 4}`, transition: 1.0, params: {},
   })),
 ];

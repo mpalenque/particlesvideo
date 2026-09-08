@@ -15,11 +15,44 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 const { default: ShowSession, SHOW_STORAGE_KEY } = await import('../src/radiance/ShowSession.js');
 const { emptyDoc } = await import('../vendor/radiance/src/fluids-show/show-doc.ts');
 
-function harness({ document = emptyDoc(10), failAudio = false, failDecode = false, stored = null } = {}) {
+/**
+ * Transporte de audio de mentira: mismo contrato que el real, pero su reloj lo
+ * mueve el test. Sirve para comprobar que el show se ancla al track y no al
+ * tiempo de pared, que es justo lo que hacía que la imagen se despegara.
+ */
+function fakeTransport({ duration = 10, failArm = false, blocked = false } = {}) {
+  return {
+    calls: [], ready: false, playing: false, duration, blocked, error: null,
+    onEnded: null, volume: 1, clock: 0, offset: 0, startedAt: 0,
+    get time() { return this.playing ? Math.min(this.duration, this.offset + (this.clock - this.startedAt)) : this.offset; },
+    async arm() {
+      this.calls.push('arm');
+      if (failArm) { this.error = 'sin audio'; throw new Error('sin audio'); }
+      this.ready = true;
+      return true;
+    },
+    play(offset) {
+      if (Number.isFinite(offset)) this.offset = offset;
+      if (!this.ready || this.playing) return false;
+      this.calls.push(`play:${this.offset.toFixed(2)}`);
+      this.startedAt = this.clock;
+      this.playing = true;
+      return true;
+    },
+    pause() { if (!this.playing) return; this.offset = this.time; this.playing = false; this.calls.push('pause'); },
+    seek(seconds) { const wasPlaying = this.playing; this.playing = false; this.offset = seconds; if (wasPlaying) this.play(); },
+    setVolume(volume) { this.volume = volume; },
+    peaks(rate) { return { rate, count: 4, data: Float32Array.from([-0.5, 0.75, -0.5, 0.75, -0.5, 0.75, -0.5, 0.75]) }; },
+    dispose() { this.calls.push('dispose'); this.ready = false; this.playing = false; },
+  };
+}
+
+function harness({ document = emptyDoc(10), failAudio = false, failDecode = false, stored = null,
+  audioMode = 'web', transport = fakeTransport(), transportOptions = null } = {}) {
   let wallTime = 0;
   const writes = [];
   const fetched = [];
-  const audioCalls = { offline: 0, realtime: 0, forbidden: [] };
+  const audioCalls = { offline: 0, transports: 0, forbidden: [] };
   const buffer = {
     duration: 10, sampleRate: 400, length: 4000, numberOfChannels: 1,
     getChannelData: () => Float32Array.from({ length: 4000 }, (_, i) => i % 2 ? 0.75 : -0.5),
@@ -31,17 +64,21 @@ function harness({ document = emptyDoc(10), failAudio = false, failDecode = fals
       return buffer;
     },
   };
+  // La sesión nunca puede fabricarse su propia salida de audio: el único
+  // reproductor legítimo es el transporte que se le inyecta.
   for (const method of ['resume', 'createGain', 'createBufferSource', 'destination', 'startRendering']) {
     Object.defineProperty(context, method, { get() {
       audioCalls.forbidden.push(method);
       throw new Error('Forbidden audio operation: ' + method);
     } });
   }
+  const audio = transportOptions ? fakeTransport(transportOptions) : transport;
   const session = new ShowSession({
     baseUrl: '/show-base/',
+    audioMode,
     now: () => wallTime,
     createOfflineAudioContext: () => { audioCalls.offline += 1; return context; },
-    createAudioContext: () => { audioCalls.realtime += 1; throw new Error('Realtime audio is forbidden'); },
+    createAudioTransport: (path, duration) => { audioCalls.transports += 1; audio.path = path; audio.duration = duration || audio.duration; return audio; },
     yieldTask: async () => {},
     storage: {
       getItem(key) { assert.equal(key, SHOW_STORAGE_KEY); return stored; },
@@ -53,30 +90,141 @@ function harness({ document = emptyDoc(10), failAudio = false, failDecode = fals
       return { ok: !failAudio, status: failAudio ? 404 : 200, arrayBuffer: async () => new ArrayBuffer(4) };
     },
   });
-  return { session, context, audioCalls, writes, fetched, setWall: (time) => { wallTime = time; } };
+  return { session, context, audio, audioCalls, writes, fetched,
+    setWall: (time) => { wallTime = time; }, setAudioClock: (time) => { audio.clock = time; } };
 }
 
-test('waveform uses offline decoding; load, legacy arm and play never create audible output', async () => {
+test('el modo web arma el track, saca de él la onda y no decodifica una segunda copia', async () => {
   const h = harness();
+  await h.session.load();
+  assert.equal(h.session.audioMode, 'web');
+  assert.equal(h.session.audioReady, true);
+  assert.equal(h.session.state().audioDecoded, true);
+  assert.equal(h.session.state().transportReady, true);
+  // Sólo el documento: el WAV lo pide el transporte, no un contexto offline.
+  assert.deepEqual(h.fetched, ['/show-base/radiance/show/fluids.show.json']);
+  assert.equal(h.audioCalls.offline, 0);
+  assert.equal(h.session.peaks().count, 4);
+  assert.deepEqual(h.audioCalls.forbidden, []);
+  await h.session.load();
+  assert.equal(h.audioCalls.transports, 1, 'un segundo hello no crea otro transporte');
+});
+
+test('el arranque no espera al audio y el track entra tarde en la posición correcta', async () => {
+  // Decodificar dos minutos y medio de WAV puede tardar, o colgarse en una
+  // máquina sin salida de audio. Esperarlo dejaba la salida sin arrancar.
+  let liberar;
+  const audio = fakeTransport();
+  const arm = audio.arm.bind(audio);
+  audio.arm = async () => { await new Promise((resolve) => { liberar = resolve; }); return arm(); };
+  const h = harness({ transport: audio });
+  await h.session.load();
+  assert.equal(h.session.state().loaded, true, 'el documento ya está listo');
+  assert.equal(h.session.audioReady, false, 'y el track todavía no');
+
+  // La nota 25 llega antes que el WAV: la imagen arranca igual, con el reloj de pared.
+  h.session.restart();
+  h.setWall(2000);
+  assert.equal(h.session.tick(), 2);
+  liberar();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(h.session.audioReady, true);
+  assert.equal(h.audio.playing, true, 'el track entra solo al terminar de cargar');
+  assert.ok(Math.abs(h.audio.offset - 2) < 0.01, 'y lo hace donde va la secuencia');
+});
+
+test('la secuencia sigue el reloj del track y no el tiempo de pared', async () => {
+  const h = harness();
+  await h.session.load();
+  h.session.restart();
+  assert.deepEqual(h.audio.calls, ['arm', 'play:0.00']);
+  // Un frame que llega tarde no corre el show: lo saltea al tiempo del audio.
+  h.setWall(90000);
+  h.setAudioClock(4);
+  assert.equal(h.session.tick(), 4);
+  h.setWall(90050);
+  assert.ok(Math.abs(h.session.time - 4.05) < 1e-9, 'entre frames el reloj interpola desde el último anclaje');
+  h.setAudioClock(6);
+  assert.equal(h.session.tick(), 6);
+  h.session.pause();
+  assert.equal(h.audio.playing, false);
+  h.setAudioClock(20);
+  assert.equal(h.session.time, 6);
+  h.session.seek(2);
+  assert.equal(h.audio.offset, 2);
+  assert.equal(h.session.time, 2);
+});
+
+test('el final del track detiene el reloj de la secuencia sin volver a arrancar solo', async () => {
+  const h = harness();
+  await h.session.load();
+  h.session.restart();
+  h.setAudioClock(10.5);
+  assert.equal(h.session.tick(), 10);
+  assert.equal(h.session.playing, false);
+  assert.equal(h.audio.playing, false);
+  assert.equal(h.session.time, 10);
+});
+
+test('el volumen y el cambio a Ableton no interrumpen la secuencia en curso', async () => {
+  const h = harness();
+  await h.session.load();
+  h.session.setVolume(0.4);
+  assert.equal(h.audio.volume, 0.4);
+  h.session.restart();
+  h.setAudioClock(3.25);
+  assert.equal(h.session.tick(), 3.25);
+  h.session.setAudioMode('external');
+  assert.equal(h.session.audioMode, 'external');
+  assert.equal(h.audio.playing, false, 'con Ableton la página se calla');
+  assert.equal(h.session.playing, true, 'pero la imagen no se corta');
+  assert.equal(h.session.time, 3.25);
+  h.setWall(1500);
+  assert.equal(h.session.tick(), 4.75, 'sin track vuelve a mandar el reloj de pared');
+});
+
+test('sin audio disponible el show visual arranca igual y avisa', async () => {
+  const h = harness({ transportOptions: { failArm: true }, failAudio: true });
+  await h.session.load();
+  assert.ok(h.session.doc);
+  assert.equal(h.session.audioReady, false);
+  assert.ok(h.session.state().audioError);
+  assert.equal(h.session.state().error, null);
+  h.session.restart();
+  h.setWall(5500);
+  assert.equal(h.session.tick(), 5.5, 'sin track manda el reloj de pared');
+  assert.equal(h.session.playing, true);
+});
+
+test('el audio cargado pero todavía bloqueado por Chrome se informa como tal', async () => {
+  const h = harness({ transportOptions: { blocked: true } });
+  await h.session.load();
+  assert.equal(h.session.audioReady, true);
+  assert.equal(h.session.audioBlocked, true);
+  assert.match(h.session.state().audioError, /clic/);
+  assert.equal(h.session.state().audioBlocked, true);
+});
+
+test('con Ableton la onda se decodifica offline y nunca se crea salida audible', async () => {
+  const h = harness({ audioMode: 'external' });
   await h.session.load();
   assert.equal(h.session.audioMode, 'external');
   assert.equal(h.session.audioReady, false);
   assert.equal(h.session.state().audioDecoded, true);
-  assert.equal(h.session.state().transportReady, true);
   assert.deepEqual(h.fetched, [
     '/show-base/radiance/show/fluids.show.json', '/show-base/radiance/audio/fluids.wav',
   ]);
   assert.equal(h.session.peaks().count, 4000);
   assert.equal(h.session.peaks().data[0], -0.5);
   assert.equal(h.session.peaks().data[3], 0.75);
-  await h.session.arm();
   h.session.restart();
   assert.equal(h.session.playing, true);
-  assert.deepEqual(h.audioCalls, { offline: 1, realtime: 0, forbidden: [] });
+  assert.deepEqual(h.audio.calls, [], 'en modo externo el transporte ni se crea');
+  assert.deepEqual(h.audioCalls, { offline: 1, transports: 0, forbidden: [] });
 });
 
 test('visual playback uses absolute elapsed time, pauses, seeks and holds the final frame', async () => {
-  const h = harness();
+  const h = harness({ audioMode: 'external' });
   await h.session.load();
   h.session.restart();
   h.context.currentTime = 99;
@@ -101,7 +249,7 @@ test('visual playback uses absolute elapsed time, pauses, seeks and holds the fi
 });
 
 test('a delayed preparation keeps the original cue timestamp instead of delaying Ableton', async () => {
-  const h = harness();
+  const h = harness({ audioMode: 'external' });
   const cueTimeSeconds = 1;
   h.setWall(3500);
   await h.session.load();
@@ -118,7 +266,7 @@ test('a delayed preparation keeps the original cue timestamp instead of delaying
 });
 
 test('late visual frames preserve loop phase across multiple revolutions', async () => {
-  const h = harness();
+  const h = harness({ audioMode: 'external' });
   await h.session.load();
   h.session.setLoop({ from: 2, to: 5, on: true });
   h.session.restart();
@@ -131,24 +279,19 @@ test('late visual frames preserve loop phase across multiple revolutions', async
   assert.equal(h.session.state().loop.on, false);
 });
 
-test('legacy audio preferences cannot enable sound or pause the external visual clock', async () => {
+test('el loop de ensayo rebobina también el track', async () => {
   const h = harness();
-  await h.session.arm();
+  await h.session.load();
+  h.session.setLoop({ from: 2, to: 5, on: true });
   h.session.restart();
-  h.setWall(3250);
-  for (const mode of ['local', 'silent', 'external', null, 'unknown']) {
-    h.session.setAudioMode(mode);
-    assert.equal(h.session.audioMode, 'external');
-    assert.equal(h.session.state().audioMode, 'external');
-    assert.equal(h.session.time, 3.25);
-    assert.equal(h.session.playing, true);
-  }
-  h.session.dispose();
-  assert.deepEqual(h.audioCalls, { offline: 1, realtime: 0, forbidden: [] });
+  h.setAudioClock(6);
+  assert.equal(h.session.tick(), 3);
+  assert.equal(h.audio.offset, 3);
+  assert.equal(h.audio.playing, true);
 });
 
 test('edits reject stale revisions and preserve the cue anchor and original storage keys', async () => {
-  const h = harness();
+  const h = harness({ audioMode: 'external' });
   await h.session.load();
   h.session.restart();
   h.setWall(3250);
@@ -168,7 +311,7 @@ test('edits reject stale revisions and preserve the cue anchor and original stor
 
 test('missing or undecodable reference waveform never blocks the authored show', async () => {
   for (const options of [{ failAudio: true }, { failDecode: true }]) {
-    const h = harness(options);
+    const h = harness({ ...options, audioMode: 'external' });
     await h.session.load();
     assert.ok(h.session.doc);
     assert.equal(h.session.audioReady, false);
@@ -181,7 +324,6 @@ test('missing or undecodable reference waveform never blocks the authored show',
     assert.equal(h.session.tick(), 5.5);
     await h.session.load();
     assert.equal(h.audioCalls.offline, 1, 'failed waveform is not retried on every hello');
-    assert.equal(h.audioCalls.realtime, 0);
     assert.deepEqual(h.audioCalls.forbidden, []);
   }
 });

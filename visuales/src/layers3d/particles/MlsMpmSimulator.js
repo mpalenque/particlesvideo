@@ -76,6 +76,7 @@ export class MlsMpmSimulator {
     params.define({ id: 'particles.viscosity', type: 'float', min: 0.01, max: 0.4, default: 0.1, label: 'Viscosidad', group: 'particles', sceneReset: false });
     params.define({ id: 'particles.gravityY', type: 'float', min: -1, max: 1, default: 0, label: 'Gravedad Y', group: 'particles' });
     params.define({ id: 'particles.bloom', type: 'float', min: 0, max: 1, default: 1, label: 'Bloom', group: 'particles' });
+    params.define({ id: 'particles.raysOnly', type: 'bool', default: false, label: 'Iluminar sólo con rayos', group: 'particles' });
     params.define({ id: 'particles.ageGrow', type: 'float', min: 0.05, max: 6, default: 1.2, label: 'Crecer con la edad (s)', group: 'particles' });
     params.define({ id: 'particles.sizeJitter', type: 'float', min: 0, max: 1, default: 0.45, label: 'Variación de tamaño', group: 'particles' });
     params.define({ id: 'particles.taper', type: 'float', min: 0, max: 0.95, default: 0.55, label: 'Punta (cola más fina)', group: 'particles' });

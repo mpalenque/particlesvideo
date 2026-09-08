@@ -228,7 +228,9 @@ export class Orb {
     this.uBloom.value = p.get('orb.bloom');
 
     this.light.position.copy(this.pos);
-    this.light.intensity = p.get('orb.light') * nivel;
+    // Al entrar en 21 el orbe anterior todavía puede estar fundiéndose. Su fuerza conserva
+    // esa transición, pero la luz se apaga desde el primer frame para dejar sólo los rayos.
+    this.light.intensity = p.get('particles.raysOnly') ? 0 : p.get('orb.light') * nivel;
     this.light.distance = p.get('orb.lightRange');
 
     // Lo que lee StickRenderer para apagar. Ya viene con la envolvente adentro, así que el

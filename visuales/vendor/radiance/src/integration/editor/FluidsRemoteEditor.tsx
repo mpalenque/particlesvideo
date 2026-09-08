@@ -438,7 +438,8 @@ export default function FluidsRemoteEditor() {
   };
 
   // This RAF moves the UI playhead and samples operator gestures only.
-  // The output owns the sole solver, renderer and visual clock; audio stays in Ableton.
+  // The output owns the sole solver, renderer, visual clock and — since
+  // 2026-09-06 — the show's audio. This editor never plays a sound itself.
   useEffect(() => {
     let raf = 0;
     let lastNow = performance.now();

@@ -45,6 +45,7 @@ export const BASE = {
   // (la de la 10) el resto del show correría con un décimo de la masa. Y `particles.length`
   // igual, que la 10 pone a la mitad.
   'particles.fraction': 1,
+  'particles.raysOnly': false,
   // El color alterno: lo usa solo la 23 (el titileo rojo/azul del kick), pero va acá para que
   // ninguna escena herede el intercambio que dejó la anterior.
   'particles.altColor': '#0000FF',
@@ -77,7 +78,9 @@ export const BASE = {
   // Las escenas 16 a 23 los habilitan de forma explícita.
   'rays.enabled': false,
   'rays.opacity': 0,
-  'rays.width': 0.014,
+  'rays.width': 0.042,
+  'rays.lightIntensity': 8,
+  'rays.lightRange': 2.6,
   'rays.bloom': 1,
   'rays.color': '#FFFFFF',
   'debris.opacity': 0,
